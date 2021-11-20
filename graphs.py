@@ -89,6 +89,24 @@ def plot_trajectory_comparison(enu, enu_noise, enu_predicted=None):
     ax.set_ylabel("North [meters]", fontsize=20)
 
 
+def plot_trajectory(pos_xy, title, xlabel, ylabel):
+    """
+    Args:
+        enu: xyz or enu or lla
+        enu_noise: xyz or enu or lla with noise
+        enu_predicted: xyz or enu or lla after correction
+
+    Returns:
+        plots xy, en or ll in one graph and z, u or a in a second graph
+    """
+    fig, ax = plt.subplots()
+    ax.plot(pos_xy[:, 0], pos_xy[:, 1], 'b')
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_title(title, fontsize=20)
+    ax.set_xlabel(xlabel, fontsize=20)
+    ax.set_ylabel(ylabel, fontsize=20)
+
+
 def plot_trajectory_and_height(locations, title1, xlabel1, ylabel1, title2, xlabel2, ylabel2):
     """
     Args:
