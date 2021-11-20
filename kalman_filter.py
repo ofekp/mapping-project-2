@@ -5,6 +5,13 @@ from data_preparation import normalize_angle, normalize_angles_array
 
 
 class KalmanFilter:
+    def __init__(self, enu_noise, times, sigma_xy, sigma_n, is_dead_reckoning):
+        self.enu_noise = enu_noise
+        self.times = times
+        self.sigma_xy = sigma_xy
+        self.sigma_n = sigma_n
+        self.is_dead_reckoning = is_dead_reckoning
+
     @staticmethod
     def calc_RMSE_maxE(X_Y_GT, X_Y_est):
         """
@@ -17,20 +24,150 @@ class KalmanFilter:
         Returns:
             (float, float): RMSE, maxE
         """
-        e_x = X_Y_GT[:, 0] - X_Y_est[:, 0].squeeze()  # e_x dim is [1, -1]
-        e_y = X_Y_GT[:, 1] - X_Y_est[:, 1].squeeze()  # e_y dim is [1, -1]
-        RMSE = np.sqrt(1 / (e_x.shape[0] - 100) * np.dot(e_x[0, 100:], e_x[0, 100:].T) + np.dot(e_y[0, 100:], e_y[0, 100:].T))
+        e_x = X_Y_GT[:, 0].squeeze() - X_Y_est[:, 0].squeeze()  # e_x dim is [1, -1]
+        e_y = X_Y_GT[:, 1].squeeze() - X_Y_est[:, 1].squeeze()  # e_y dim is [1, -1]
+        e_x = e_x[0, 100:]
+        e_y = e_y[0, 100:]
+        RMSE = np.sqrt(1 / (e_x.shape[0] - 100) * np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T))
         maxE = np.max(np.abs(e_x) + np.abs(e_y))
         return float(RMSE), maxE
 
+    def run(self):
+        delta_t_0 = self.times[1] - self.times[0]
+        enu_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], 0, 0]]).reshape(1, 4)
+        cov = np.diag([7.0, 7.0, 7.0, 7.0])  # TODO(ofekp): should this be [3, 3, 0, 0]?
+        cov_graph_x = [float(cov[0, 0])]
+        cov_graph_y = [float(cov[1, 1])]
+        # we set R according to the suggestion in the presentation form the class
+        R_t = np.diag([0, 0, 1, 1]) * delta_t_0 * self.sigma_n
+        Q_t = np.diag([self.sigma_xy, self.sigma_xy])
+        # since we only measure the position we initialize C_t as follows
+        C_t = np.array([[1.0, 0.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0, 0.0]]).reshape(2, 4)
+        elapsed_time = delta_t_0
+        for i in range(1, self.enu_noise.shape[0]):
+            # state and covariance prediction
+            delta_t = self.times[i] - self.times[i - 1]
+            A = np.matrix([[1.0, 0.0, delta_t, 0.0],
+                           [0.0, 1.0, 0.0, delta_t],
+                           [0.0, 0.0, 1.0, 0.0],
+                           [0.0, 0.0, 0.0, 1.0]])
+            new_state_prediction = np.dot(A, enu_kf[-1, :].T).reshape(4, 1)
+            cov = np.dot(np.dot(A, cov), A.T) + R_t
 
-# class ExtendedKalmanFilter:
-#
-#     #TODO
-#     @staticmethod
-#     def calc_RMSE_maxE(X_Y_GT, X_Y_est):
-#         #TODO
-#         return RMSE, maxE
+            # Kalman gain
+            elapsed_time += delta_t
+            if self.is_dead_reckoning and elapsed_time > 5:
+                K_t = np.zeros((4, 2), dtype=float)
+            else:
+                K_t = np.dot(np.dot(cov, C_t.T), np.linalg.pinv(np.dot(np.dot(C_t, cov), C_t.T) + Q_t))
+
+            # correction
+            z_t = self.enu_noise[i, 0:2]
+            new_state = new_state_prediction + np.dot(K_t, (z_t.reshape(2, 1) - np.dot(C_t, new_state_prediction)))
+            cov = np.dot((np.identity(4) - np.dot(K_t, C_t)), cov)
+
+            # update the predicted path
+            enu_kf = np.concatenate([enu_kf, new_state.reshape(1, 4)], axis=0)
+            cov_graph_x.append(float(cov[0, 0]))
+            cov_graph_y.append(float(cov[1, 1]))
+        return enu_kf, cov_graph_x, cov_graph_y, cov
+
+
+class ExtendedKalmanFilter:
+    def __init__(self, enu_noise, yaw_vf_wz, times, sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning):
+        self.enu_noise = enu_noise
+        self.yaw_vf_wz = yaw_vf_wz
+        self.times = times
+        self.sigma_xy = sigma_xy
+        self.sigma_theta = sigma_theta
+        self.sigma_vf = sigma_vf
+        self.sigma_wz = sigma_wz
+        self.k = k
+        self.is_dead_reckoning = is_dead_reckoning
+
+    @staticmethod
+    def calc_RMSE_maxE(X_Y_GT, X_Y_est):
+        """
+        That function calculates RMSE and maxE
+
+        Args:
+            X_Y_GT (np.ndarray): ground truth values of x and y
+            X_Y_est (np.ndarray): estimated values of x and y
+
+        Returns:
+            (float, float): RMSE, maxE
+        """
+        e_x = X_Y_GT[:, 0].squeeze() - X_Y_est[:, 0].squeeze()  # e_x dim is [1, -1]
+        e_y = X_Y_GT[:, 1].squeeze() - X_Y_est[:, 1].squeeze()  # e_y dim is [1, -1]
+        e_x = e_x[100:]
+        e_y = e_y[100:]
+        RMSE = np.sqrt(1 / (e_x.shape[0] - 100) * np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T))
+        maxE = np.max(np.abs(e_x) + np.abs(e_y))
+        return float(RMSE), maxE
+
+    def run(self):
+        delta_t_0 = self.times[1] - self.times[0]
+        state_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], self.yaw_vf_wz[0, 0]]]).reshape(1, 3)
+        cov = np.diag([self.k * (self.sigma_xy ** 2), self.k * (self.sigma_xy ** 2), self.k * (self.sigma_theta ** 2)])  # todo: check if those are already given as squared
+        cov_graph_x = [float(cov[0, 0])]
+        cov_graph_y = [float(cov[1, 1])]
+        cov_graph_yaw = [float(cov[2, 2])]
+        # we set R according to the suggestion in the presentation form the class
+        R_t_tilde = np.diag([self.sigma_vf, self.sigma_wz])
+        Q_t = np.diag([self.sigma_xy, self.sigma_xy])
+        # since we only measure the position we initialize C_t as follows
+        H_t = np.array([[1.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0]]).reshape(2, 3)
+        elapsed_time = delta_t_0
+        for i in range(1, self.enu_noise.shape[0]):
+            # state and covariance prediction
+            delta_t = self.times[i] - self.times[i - 1]
+            A = np.matrix([[1.0, 0.0, delta_t, 0.0],
+                           [0.0, 1.0, 0.0, delta_t],
+                           [0.0, 0.0, 1.0, 0.0],
+                           [0.0, 0.0, 0.0, 1.0]])
+            v_t = float(self.yaw_vf_wz[i, 1])
+            w_t = float(self.yaw_vf_wz[i, 2])
+            factor = v_t / w_t
+            g = np.array([
+                factor * (np.sin(state_kf[-1, 2] + delta_t * w_t) - np.sin(state_kf[-1, 2])),
+                factor * (np.cos(state_kf[-1, 2]) - np.cos(state_kf[-1, 2] + delta_t * w_t)),
+                delta_t * w_t
+            ])
+            new_state_prediction = state_kf[-1, :] + g
+
+            factor2 = v_t / (w_t ** 2)
+            V_t = np.array([
+                [(1 / w_t) * (np.sin(state_kf[-1, 2] + delta_t * w_t) - np.sin(state_kf[-1, 2])), factor2 * (np.sin(state_kf[-1, 2]) - np.sin(state_kf[-1, 2] + delta_t * w_t)) + delta_t * factor * np.cos(state_kf[-1, 2] + delta_t * w_t)],
+                [(1 / w_t) * (np.cos(state_kf[-1, 2]) - np.cos(state_kf[-1, 2] + delta_t * w_t)), factor2 * (np.cos(state_kf[-1, 2] + delta_t * w_t) - np.cos(state_kf[-1, 2])) + delta_t * factor * np.sin(state_kf[-1, 2] + delta_t * w_t)],
+                [0, delta_t]
+            ])
+            G_t = np.array([
+                [1, 0, factor * (np.cos(state_kf[-1, 2] + delta_t * w_t) - np.cos(state_kf[-1, 2]))],
+                [0, 1, factor * (np.sin(state_kf[-1, 2] + delta_t * w_t) - np.sin(state_kf[-1, 2]))],
+                [0, 0, 1],
+            ])
+            cov = np.dot(np.dot(G_t, cov), G_t.T) + np.dot(np.dot(V_t, R_t_tilde), V_t.T)
+
+            # Kalman gain
+            elapsed_time += delta_t
+            if self.is_dead_reckoning and elapsed_time > 5:
+                K_t = np.zeros((4, 2), dtype=float)
+            else:
+                K_t = np.dot(np.dot(cov, H_t.T), np.linalg.pinv(np.dot(np.dot(H_t, cov), H_t.T) + Q_t)) # [2,3] [3,3] [3,2]   [2,3]
+
+            # correction
+            z_t = self.enu_noise[i, 0:2]
+            new_state = new_state_prediction.reshape(3, 1) + np.dot(K_t, (z_t.reshape(2, 1) - np.dot(H_t, new_state_prediction).reshape(2, 1)))
+            cov = np.dot((np.identity(3) - np.dot(K_t, H_t)), cov)
+
+            # update the predicted path
+            state_kf = np.concatenate([state_kf, new_state.reshape(1, 3)], axis=0)
+            cov_graph_x.append(float(cov[0, 0]))
+            cov_graph_y.append(float(cov[1, 1]))
+            cov_graph_yaw.append(float(cov[2, 2]))
+        return state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, cov
 
 
 # class ExtendedKalmanFilterSLAM:

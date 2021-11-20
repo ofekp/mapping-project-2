@@ -3,9 +3,12 @@ import os
 import numpy as np
 
 from data_preparation import *
-from kalman_filter import KalmanFilter
+from kalman_filter import KalmanFilter, ExtendedKalmanFilter
 import graphs
 import random
+from utils.misc_tools import error_ellipse
+from utils.ellipse import draw_ellipse
+import matplotlib.pyplot as plt
 
 random.seed(11)
 np.random.seed(17)
@@ -13,15 +16,31 @@ np.random.seed(17)
 
 class ProjectQuestions:
     def __init__(self, dataset):
+        """
+        Initializes:
+        - lat: latitude [deg]
+        - lon: longitude [deg]
+        - yaw: heading [rad]
+        - vf: forward velocity parallel to earth-surface [m/s]
+        - wz: angular rate around z axis [rad/s]
+        - enu - lla converted to enu
+        - times - for each frame, how much time has elapsed from the previous frame
+        - enu_noise - enu with Gaussian noise (sigma_xy=3 meters)
+        """
         self.dataset = dataset
+        # build_ENU_from_GPS_trajectory
+        self.enu, self.times, self.yaw_vf_wz = build_GPS_trajectory(self.dataset)
+        # add noise to the trajectory
+        self.sigma_xy = 3
+        # TODO(ofekp): I did not use add_gaussian_noise as it requires adding noise one col at a time
+        self.enu_noise = self.enu + np.concatenate((np.random.normal(0, self.sigma_xy, (self.enu.shape[0], 2)), np.zeros((self.enu.shape[0], 1))), axis=1)
     
     def Q1(self):
         """
         That function runs the code of question 1 of the project.
         Loads from kitti dataset, set noise to GT-gps values, and use Kalman Filter over the noised values.
         """
-        # build_ENU_from_GPS_trajectory
-        enu, times, yaw_vf_wz = build_GPS_trajectory(self.dataset)
+        # plot lla
         gps_imu_data = [gpu_imu[0] for gpu_imu in self.dataset.get_gps_imu()]
         lon_vec = np.array([e.lon for e in gps_imu_data]).reshape(-1, 1)
         lat_vec = np.array([e.lat for e in gps_imu_data]).reshape(-1, 1)
@@ -35,7 +54,9 @@ class ProjectQuestions:
                                           'Altitude [meters]')
         # graphs.show_graphs()
         graphs.show_graphs("../Results/Kalman Filter", "lla_trajectory", overwrite=False)
-        graphs.plot_trajectory_and_height(enu,
+
+        # plot enu
+        graphs.plot_trajectory_and_height(self.enu,
                                           'Trajectory of the drive - east/north in meters',
                                           'East [meters]',
                                           'North [meters]',
@@ -45,85 +66,83 @@ class ProjectQuestions:
         # graphs.show_graphs()
         graphs.show_graphs("../Results/Kalman Filter", "enu_trajectory", overwrite=False)
 
-        # the following did not work:
-        # graphs.plot_single_graph(locations[: 0:2], "GPS Trajectory ENU", "East [meters]", "North [meters]", "GPS trajectory", is_scatter=True)
-        # graphs.show_graphs()
-
-        # add noise to the trajectory
-        sigma_x_y = 3
-        enu_noise = enu + np.concatenate((np.random.normal(0, sigma_x_y, (enu.shape[0], 2)), np.zeros((enu.shape[0], 1))), axis=1)
-        graphs.plot_trajectory_comparison(enu, enu_noise)
+        # plot enu and enu_noise
+        graphs.plot_trajectory_comparison(self.enu, self.enu_noise)
         # graphs.show_graphs()
         graphs.show_graphs("../Results/Kalman Filter", "comparison_enu_with_and_without_noise", overwrite=False)
         
         # KalmanFilter
-        # set the initial state
-        # u = np.array([enu_noise[0, 0], enu_noise[0, 1], 0, 0])
-        enu_predicted = np.array([[enu_noise[0, 0], enu_noise[0, 1], 0, 0]]).reshape(1, 4)
-        cov = np.diag([10.0, 10.0, 10.0, 10.0])  # TODO(ofekp): should this be [3, 3, 0, 0]?
-        cov_graph_x = [float(cov[0, 0])]
-        cov_graph_y = [float(cov[1, 1])]
-        # we set R according to the suggestion in the presentation form the class
-        delta_t_0 = times[1] - times[0]
-        sigma_n = 2  # TODO(ofekp): figure out if this is the only value that should be heuristically set
-        R_t = np.diag([0, 0, 1, 1]) * delta_t_0 * sigma_n
-        Q_t = np.diag([sigma_x_y, sigma_x_y])
-        # since we only measure the position we initialize C_t as follows
-        C_t = np.array([[1.0, 0.0, 0.0, 0.0],
-                         [0.0, 1.0, 0.0, 0.0]]).reshape(2, 4)
-        for i in range(1, enu_noise.shape[0]):
-            # state and covariance prediction
-            delta_t = times[i] - times[i - 1]
-            A = np.matrix([[1.0, 0.0, delta_t, 0.0],
-                           [0.0, 1.0, 0.0, delta_t],
-                           [0.0, 0.0, 1.0, 0.0],
-                           [0.0, 0.0, 0.0, 1.0]])
-            new_state_prediction = np.dot(A, enu_predicted[-1, :].T).reshape(4, 1)
-            cov = np.dot(np.dot(A, cov), A.T) + R_t
+        configs = [
+            {
+                "sigma_n": 2,
+                "dead_reckoning": False
+            },
+        ]
 
-            # Kalman gain
-            K_t = np.dot(np.dot(cov, C_t.T), np.linalg.pinv(np.dot(np.dot(C_t, cov), C_t.T) + Q_t))
+        for config in configs:
+            sigma_n = config['sigma_n']
+            is_dead_reckoning = config['dead_reckoning']
+            kf = KalmanFilter(self.enu_noise, self.times, self.sigma_xy, sigma_n, is_dead_reckoning)
+            enu_kf, cov_graph_x, cov_graph_y, final_cov = kf.run()
 
-            # correction
-            z_t = enu_noise[i, 0:2]
-            new_state = new_state_prediction + np.dot(K_t, (z_t.reshape(2, 1) - np.dot(C_t, new_state_prediction)))
-            cov = np.dot((np.identity(4) - np.dot(K_t, C_t)), cov)
+            graphs.plot_trajectory_comparison(self.enu, self.enu_noise, enu_predicted=enu_kf[:, 0:2])
+            # graphs.show_graphs()
+            graphs.show_graphs("../Results/Kalman Filter", "kalman_filter_const_vel_predicted_path_sigma_n_{}{}".format(sigma_n, "dead_reckoning" if is_dead_reckoning else ""), overwrite=False)
 
-            # update the predicted path
-            enu_predicted = np.concatenate([enu_predicted, new_state.reshape(1, 4)], axis=0)
-            cov_graph_x.append(float(cov[0, 0]))
-            cov_graph_y.append(float(cov[1, 1]))
+            RMSE, maxE = KalmanFilter.calc_RMSE_maxE(self.enu, enu_kf)
+            print("Kalman Filter - Constant Velocity")
+            print("maxE [{}]".format(maxE))
+            print("RMSE [{}]".format(RMSE))
+            assert maxE < 6.95
 
-        graphs.plot_trajectory_comparison(enu, enu_noise, enu_predicted=enu_predicted[:, 0:2])
-        # graphs.show_graphs()
-        graphs.show_graphs("../Results/Kalman Filter", "kalman_filter_const_vel_predicted_path", overwrite=False)
+            # let's draw the error
+            e_x = self.enu[:, 0] - enu_kf[:, 0].squeeze()  # e_x dim is [1, -1]
+            e_y = self.enu[:, 1] - enu_kf[:, 1].squeeze()  # e_y dim is [1, -1]
+            graphs.plot_error((np.asarray(e_x).squeeze(), cov_graph_x), (np.asarray(e_y).squeeze(), cov_graph_y))
+            # graphs.show_graphs()
+            graphs.show_graphs("../Results/Kalman Filter", "kalman_filter_error_comparison_x_y_sigma_n_{}{}".format(sigma_n, "dead_reckoning" if is_dead_reckoning else ""), overwrite=False)
 
-        RMSE, maxE = KalmanFilter.calc_RMSE_maxE(enu, enu_predicted)
-        assert maxE < 6.95
-        print("Kalman Filter - Constant Velocity")
-        print("maxE [{}]".format(maxE))
-        print("RMSE [{}]".format(RMSE))
-
-        # let's draw the error
-        e_x = enu[:, 0] - enu_predicted[:, 0].squeeze()  # e_x dim is [1, -1]
-        e_y = enu[:, 1] - enu_predicted[:, 1].squeeze()  # e_y dim is [1, -1]
-        graphs.plot_error(np.asarray(e_x).squeeze(), np.asarray(e_y).squeeze(), cov_graph_x, cov_graph_y)
-        graphs.show_graphs()
-        # graphs.show_graphs("../Results/Kalman Filter", "kalman_filter_error_comparison_x_y")
-
+            # show the covariance matrix of the state as an ellipse
+            fig, ax = plt.subplots()
+            ellipse = error_ellipse([0, 0], final_cov)
+            draw_ellipse(ax, [ellipse._center[0], ellipse._center[1], ellipse.angle], ellipse.width, ellipse.height, 'b')
+            ax.set_aspect('equal', adjustable='box')
+            # graphs.show_graphs()
+            graphs.show_graphs("../Results/Kalman Filter", "kalman_filter_cov_as_ellipse_sigma_n_{}{}".format(sigma_n, "dead_reckoning" if is_dead_reckoning else ""), overwrite=False)
 
     def Q2(self):
-        # sigma_samples = 
-        
-        # sigma_vf, sigma_omega = 
-        
-        # build_LLA_GPS_trajectory
-        
-        # add_gaussian_noise to u and measurments (locations_gt[:,i], sigma_samples[i])
-            
-        # ekf = ExtendedKalmanFilter(sigma_samples, sigma_vf, sigma_omega)
-        # locations_ekf, sigma_x_xy_yx_y_t = ekf.run(locations_noised, times, yaw_vf_wz_noised, do_only_predict=False)
-        
+        # plot yaw, yaw rate and forward velocity
+        graphs.plot_yaw_yaw_rate_fv(self.yaw_vf_wz[:, 0], self.yaw_vf_wz[:, 2], self.yaw_vf_wz[:, 1])
+        # graphs.show_graphs()
+        graphs.show_graphs("../Results/Extended Kalman Filter", "ekf_yaw_yaw_rate_forward_velocity_graph", overwrite=False)
+
+        sigma_theta = 0.0
+        sigma_vf = 0.0
+        sigma_wz = 0.0
+        k = 6
+        is_dead_reckoning = False
+        ekf = ExtendedKalmanFilter(self.enu_noise, self.yaw_vf_wz, self.times, self.sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning)
+        # state_ekf, sigma_x_xy_yx_y_t = ekf.run(locations_noised, times, yaw_vf_wz_noised, do_only_predict=False)  # todo: I did not follow this template...
+        state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, cov = ekf.run()
+
+        RMSE, maxE = ExtendedKalmanFilter.calc_RMSE_maxE(self.enu, state_kf)
+        print("Extended Kalman Filter - Noisy East/North")
+        print("maxE [{}]".format(maxE))
+        print("RMSE [{}]".format(RMSE))
+        assert maxE < 6.95
+
+        graphs.plot_trajectory_comparison(self.enu, self.enu_noise, enu_predicted=state_kf[:, 0:2])
+        graphs.show_graphs()
+        # graphs.show_graphs("../Results/Kalman Filter", "ekf_const_vel_predicted_path_sigma_n_{}{}".format(k, "dead_reckoning" if is_dead_reckoning else ""), overwrite=False)
+
+        # let's draw the error
+        e_x = self.enu[:, 0].squeeze() - state_kf[:, 0].squeeze()  # e_x dim is [1, -1]
+        e_y = self.enu[:, 1].squeeze() - state_kf[:, 1].squeeze()  # e_y dim is [1, -1]
+        e_yaw = self.yaw_vf_wz[:, 0].squeeze() % (2 * np.pi) - state_kf[:, 2].squeeze() % (2 * np.pi)  # e_yaw dim is [1, -1]
+        e_yaw = np.where(e_yaw > 6, e_yaw - 2 * np.pi, e_yaw)  # I had one sample where this occurred
+        graphs.plot_error((np.asarray(e_x).squeeze(), cov_graph_x), (np.asarray(e_y).squeeze(), cov_graph_y), (np.asarray(e_yaw).squeeze(), cov_graph_yaw))
+        graphs.show_graphs()
+
         # RMSE, maxE = ekf.calc_RMSE_maxE(locations_gt, locations_ekf)
  
         # build_animation
@@ -181,6 +200,7 @@ class ProjectQuestions:
     
     def run(self):
         self.Q1()
+        self.Q2()
         # self.Q3()
         
         

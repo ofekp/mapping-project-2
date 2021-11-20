@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import numpy as np
 
+
 def angle_diff(angle1, angle2):
     return np.arctan2(np.sin(angle1-angle2), np.cos(angle1-angle2))
+
 
 def error_ellipse(position, sigma):
 

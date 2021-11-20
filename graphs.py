@@ -8,8 +8,33 @@ import io
 from PIL import Image
 
 
-def plot_error(err_x, err_y, cov_x, cov_y):
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+def plot_yaw_yaw_rate_fv(yaw, yaw_rate, fv):
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    ax1.plot(range(yaw.shape[0]), yaw, 'b')
+    ax1.plot(range(yaw_rate.shape[0]), yaw_rate, 'r')
+    ax1.set_title("Yaw and yaw change rate per frame", fontsize=20)
+    ax1.set_xlabel("Frame #", fontsize=20)
+    ax1.set_ylabel("Yaw [rad]", fontsize=20)
+    ax1.legend(["Yaw [rad]", "Yaw change rate [rad/s]"], prop={"size": 20}, loc="best")
+
+    ax2.plot(range(yaw_rate.shape[0]), yaw_rate, 'b')
+    ax2.set_title("Yaw change rate per frame (isolated)", fontsize=20)
+    ax2.set_xlabel("Frame #", fontsize=20)
+    ax2.set_ylabel("Yaw [rad/s]", fontsize=20)
+
+    ax3.plot(range(fv.shape[0]), fv, 'b')
+    ax3.set_title("Forward velocity per frame", fontsize=20)
+    ax3.set_xlabel("Frame #", fontsize=20)
+    ax3.set_ylabel("Forward Velocity [m/s]", fontsize=20)
+
+
+def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
+    # TODO(ofekp): should add legends
+    if err_cov_yaw:
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    else:
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+    err_x, cov_x = err_cov_x
     ax1.plot(range(err_x.shape[0]), err_x, 'b')
     ax1.plot(range(len(cov_x)), cov_x, 'r')
     ax1.plot(range(len(cov_x)), [-a for a in cov_x], 'r')
@@ -17,16 +42,28 @@ def plot_error(err_x, err_y, cov_x, cov_y):
         "Error throughout the path along the x axis",
         fontsize=20)
     ax1.set_xlabel("Frame #", fontsize=20)
-    ax1.set_ylabel("Error (x_gt - x_predicted)", fontsize=20)
+    ax1.set_ylabel("Error (x_gt - x_predicted) [meters]", fontsize=20)
 
+    err_y, cov_y = err_cov_y
     ax2.plot(range(err_y.shape[0]), err_y, 'b')
-    ax1.plot(range(len(cov_y)), cov_y, 'r')
-    ax1.plot(range(len(cov_y)), [-a for a in cov_y], 'r')
+    ax2.plot(range(len(cov_y)), cov_y, 'r')
+    ax2.plot(range(len(cov_y)), [-a for a in cov_y], 'r')
     ax2.set_title(
         "Error throughout the path along the y axis",
         fontsize=20)
     ax2.set_xlabel("Frame #", fontsize=20)
-    ax2.set_ylabel("Error (y_gt - y_predicted)", fontsize=20)
+    ax2.set_ylabel("Error (y_gt - y_predicted) [meters]", fontsize=20)
+
+    if err_cov_yaw:
+        err_yaw, cov_yaw = err_cov_yaw
+        ax3.plot(range(err_yaw.shape[0]), err_yaw, 'b')
+        ax3.plot(range(len(cov_yaw)), cov_yaw, 'r')
+        ax3.plot(range(len(cov_yaw)), [-a for a in cov_yaw], 'r')
+        ax3.set_title(
+            "Error throughout the path in yaw",
+            fontsize=20)
+        ax3.set_xlabel("Frame #", fontsize=20)
+        ax3.set_ylabel("Error (yaw_gt - yaw_predicted) [rad]", fontsize=20)
 
 
 def plot_trajectory_comparison(enu, enu_noise, enu_predicted=None):
@@ -39,10 +76,11 @@ def plot_trajectory_comparison(enu, enu_noise, enu_predicted=None):
     Returns:
         plots xy, en or ll in one graph and z, u or a in a second graph
     """
+    # TODO(ofekp): should add legends
     fig, ax = plt.subplots()
     ax.plot(enu[:, 0], enu[:, 1], 'b')
     ax.plot(enu_noise[:, 0], enu_noise[:, 1], 'r')
-    is_predicted_enu_given = type(enu_predicted) is np.matrix
+    is_predicted_enu_given = type(enu_predicted) is np.matrix or type(enu_predicted) is np.ndarray
     if is_predicted_enu_given:
         ax.plot(enu_predicted[:, 0], enu_predicted[:, 1], 'g')
     ax.set_aspect('equal', adjustable='box')
@@ -220,10 +258,7 @@ def show_graphs(folder=None, file_name=None, overwrite=False):
             return
         figure = plt.gcf()  # get current figure
         number_of_subplots_in_figure = len(plt.gcf().get_axes())
-        if number_of_subplots_in_figure == 2:
-            figure.set_size_inches(36, 18)
-        else:
-            figure.set_size_inches(18, 18)
+        figure.set_size_inches(number_of_subplots_in_figure * 18, 18)
         ram = io.BytesIO()
         plt.savefig(ram, format='png', dpi=100)
         ram.seek(0)
