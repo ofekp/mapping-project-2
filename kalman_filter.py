@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from utils.plot_state import plot_state
 from data_preparation import normalize_angle, normalize_angles_array
-
+import math
 
 class KalmanFilter:
     def __init__(self, enu_noise, times, sigma_xy, sigma_n, is_dead_reckoning):
@@ -110,9 +110,10 @@ class ExtendedKalmanFilter:
         delta_t_0 = self.times[1] - self.times[0]
         state_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], self.yaw_vf_wz[0, 0]]]).reshape(1, 3)
         cov = np.diag([self.k * (self.sigma_xy ** 2), self.k * (self.sigma_xy ** 2), self.k * (self.sigma_theta ** 2)])  # todo: check if those are already given as squared
-        cov_graph_x = [float(cov[0, 0])]
-        cov_graph_y = [float(cov[1, 1])]
-        cov_graph_yaw = [float(cov[2, 2])]
+        cov_graph_x = [math.sqrt(float(cov[0, 0]))]
+        cov_graph_y = [math.sqrt(float(cov[1, 1]))]
+        cov_graph_yaw = [math.sqrt(float(cov[2, 2]))]
+        covs = [np.array([cov[0, 0], cov[1, 0], cov[0, 1], cov[1, 1]])]
         # we set R according to the suggestion in the presentation form the class
         R_t_tilde = np.diag([self.sigma_vf, self.sigma_wz])
         Q_t = np.diag([self.sigma_xy, self.sigma_xy])
@@ -123,10 +124,6 @@ class ExtendedKalmanFilter:
         for i in range(1, self.enu_noise.shape[0]):
             # state and covariance prediction
             delta_t = self.times[i] - self.times[i - 1]
-            A = np.matrix([[1.0, 0.0, delta_t, 0.0],
-                           [0.0, 1.0, 0.0, delta_t],
-                           [0.0, 0.0, 1.0, 0.0],
-                           [0.0, 0.0, 0.0, 1.0]])
             v_t = float(self.yaw_vf_wz[i, 1])
             w_t = float(self.yaw_vf_wz[i, 2])
             factor = v_t / w_t
@@ -164,10 +161,11 @@ class ExtendedKalmanFilter:
 
             # update the predicted path
             state_kf = np.concatenate([state_kf, new_state.reshape(1, 3)], axis=0)
-            cov_graph_x.append(float(cov[0, 0]))
-            cov_graph_y.append(float(cov[1, 1]))
-            cov_graph_yaw.append(float(cov[2, 2]))
-        return state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, cov
+            cov_graph_x.append(math.sqrt(float(cov[0, 0])))
+            cov_graph_y.append(math.sqrt(float(cov[1, 1])))
+            cov_graph_yaw.append(math.sqrt(float(cov[2, 2])))
+            covs.append(np.array([cov[0, 0], cov[1, 0], cov[0, 1], cov[1, 1]]))
+        return state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, np.stack(covs)
 
 
 # class ExtendedKalmanFilterSLAM:

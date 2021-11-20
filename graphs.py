@@ -189,14 +189,15 @@ def build_animation(X_Y0, X_Y1, X_Y2, x_xy_xy_y, title, xlabel, ylabel, label0, 
     frames = []
     
     fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
+    fig.set_size_inches(18, 18)
+    ax = fig.add_subplot(1, 1, 1)
     print("Creating animation")
     
     x0, y0, x1, y1, x2, y2 = [], [], [], [], [], []
     val0, = plt.plot([], [], 'b-', animated=True, label=label0)
     val1, = plt.plot([], [], 'g:', animated=True, label=label1)
     val2, = plt.plot([], [], 'r--', animated=True, label=label2)
-    val3 = Ellipse(xy=(0,0), width=0, height=0, angle=0, animated=True)
+    val3 = Ellipse(xy=(0, 0), width=0, height=0, angle=0, animated=True)
     
     ax.add_patch(val3)
     plt.legend()
@@ -204,8 +205,23 @@ def build_animation(X_Y0, X_Y1, X_Y2, x_xy_xy_y, title, xlabel, ylabel, label0, 
     values = np.hstack((X_Y0, X_Y1, X_Y2, x_xy_xy_y))
     
     def init():
-        ax.set_xlim(-50, 450)
-        ax.set_ylim(-550, 100)
+        margin = 10
+        x_min = np.min(X_Y0[:, 0]) - margin
+        x_max = np.max(X_Y0[:, 0]) + margin
+        y_min = np.min(X_Y0[:, 1]) - margin
+        y_max = np.max(X_Y0[:, 1]) + margin
+        if (x_max - x_min) > (y_max - y_min):
+            h = (margin + x_max - x_min) / 2
+            c = (y_max + y_min) / 2
+            y_min = c - h
+            y_max = c + h
+        else:
+            w = (margin + y_max - y_min) / 2
+            c = (x_max + x_min) / 2
+            x_min = c - w
+            x_max = c + w
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
         ax.set_title(title)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -226,14 +242,14 @@ def build_animation(X_Y0, X_Y1, X_Y2, x_xy_xy_y, title, xlabel, ylabel, label0, 
         val1.set_data(x1, y1)
         val2.set_data(x2, y2)
         
-        cov_mat = frame[6:].reshape(2,-1)
+        cov_mat = frame[6:].reshape(2, -1)
         ellipse = error_ellipse(np.array([frame[4], frame[5]]), cov_mat)
         
-        val3.set_angle(ellipse.get_angle())
-        val3.set_center(ellipse.get_center())
-        val3.set_width(ellipse.get_width())
-        val3.set_height(ellipse.get_height())
-        val3.set_alpha(ellipse.get_alpha())
+        val3.angle = ellipse.angle
+        val3.center = ellipse.center
+        val3.width = ellipse.width
+        val3.height = ellipse.height
+        val3._alpha = ellipse._alpha
         
         return val0, val1, val2, val3
     
@@ -245,7 +261,7 @@ def save_animation(ani, basedir, file_name):
     print("Saving animation")
     Writer = animation.writers['ffmpeg']
     writer = Writer(fps=50, metadata=dict(artist='Me'), bitrate=1800)
-    ani.save(os.path.join(basedir, f'{file_name}.mp4'), writer=writer)
+    ani.save(os.path.join(basedir, f'{file_name}.mp4'), writer=writer, dpi=100)
     print("Animation saved")
 
 

@@ -117,13 +117,13 @@ class ProjectQuestions:
         graphs.show_graphs("../Results/Extended Kalman Filter", "ekf_yaw_yaw_rate_forward_velocity_graph", overwrite=False)
 
         sigma_theta = 0.0
-        sigma_vf = 0.0
-        sigma_wz = 0.0
-        k = 6
+        sigma_vf = 2.0
+        sigma_wz = 0.02
+        k = 2
         is_dead_reckoning = False
         ekf = ExtendedKalmanFilter(self.enu_noise, self.yaw_vf_wz, self.times, self.sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning)
         # state_ekf, sigma_x_xy_yx_y_t = ekf.run(locations_noised, times, yaw_vf_wz_noised, do_only_predict=False)  # todo: I did not follow this template...
-        state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, cov = ekf.run()
+        state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, covs = ekf.run()
 
         RMSE, maxE = ExtendedKalmanFilter.calc_RMSE_maxE(self.enu, state_kf)
         print("Extended Kalman Filter - Noisy East/North")
@@ -140,18 +140,18 @@ class ProjectQuestions:
         e_y = self.enu[:, 1].squeeze() - state_kf[:, 1].squeeze()  # e_y dim is [1, -1]
         e_yaw = self.yaw_vf_wz[:, 0].squeeze() % (2 * np.pi) - state_kf[:, 2].squeeze() % (2 * np.pi)  # e_yaw dim is [1, -1]
         e_yaw = np.where(e_yaw > 6, e_yaw - 2 * np.pi, e_yaw)  # I had one sample where this occurred
+        e_yaw = np.where(e_yaw < -5.5, e_yaw + 2 * np.pi, e_yaw)  # I had a few samples where this occurred
         graphs.plot_error((np.asarray(e_x).squeeze(), cov_graph_x), (np.asarray(e_y).squeeze(), cov_graph_y), (np.asarray(e_yaw).squeeze(), cov_graph_yaw))
         graphs.show_graphs()
 
         # RMSE, maxE = ekf.calc_RMSE_maxE(locations_gt, locations_ekf)
  
-        # build_animation
-        # save_animation(ani, os.path.dirname(__file__), "ekf_predict")
-        pass
+        anim = graphs.build_animation(self.enu[:, 0:2], self.enu_noise[:, 0:2], state_kf[:, 0:2], covs, "Animated trajectory", "East [meters]", "North [meters]", "l0", "l1", "l2")
+        graphs.save_animation(anim, "../Results/Extended Kalman Filter", "ekf_predict_animation")
         
     # def Q3(self):
-    #     landmarks = self.dataset.load_landmarks()
-    #     sensor_data_gt = self.dataset.load_sensor_data()
+        landmarks = self.dataset.load_landmarks()
+        sensor_data_gt = self.dataset.load_sensor_data()
     #
     #     sigma_x_y_theta = #TODO
     #     variance_r1_t_r2 = #TODO
