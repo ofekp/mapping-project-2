@@ -186,9 +186,9 @@ class ExtendedKalmanFilterSLAM:
 
         F = np.hstack((np.identity(3), np.zeros((3, 2 * N))))
         G_x = np.matrix([
-            [1, 0, -delta_trans * np.sin(theta_prev + delta_rot1)],
-            [0, 1, delta_trans * np.cos(theta_prev + delta_rot1)],
-            [0, 0, 1]
+            [0, 0, -delta_trans * np.sin(theta_prev + delta_rot1)],
+            [0, 0, delta_trans * np.cos(theta_prev + delta_rot1)],
+            [0, 0, 0]
         ])
         G_t = np.identity(3 + 2 * N) + np.dot(np.dot(F.T, G_x), F)
 
@@ -199,8 +199,8 @@ class ExtendedKalmanFilterSLAM:
         ])
 
         t = np.array([
-            delta_trans * np.cos(x_prev + delta_rot1),
-            delta_trans * np.sin(y_prev + delta_rot1),
+            delta_trans * np.cos(theta_prev + delta_rot1),
+            delta_trans * np.sin(theta_prev + delta_rot1),
             delta_rot1 + delta_rot2
         ]).squeeze()
         mu_est = mu_prev.copy()
@@ -244,24 +244,39 @@ class ExtendedKalmanFilterSLAM:
             F_j = np.hstack((I[:,:3], np.zeros((5, 2*j)), I[:,3:], np.zeros((5, 2*N-2*(j+1)))))
 
             q_sqrt = np.sqrt(q)
-            Hi = (1 / q) * np.dot(np.matrix([[-q_sqrt * delta[0], -q_sqrt * delta[1], 0, q_sqrt * delta[0], q_sqrt * delta[1]], [delta[1], -delta[0], -q, -delta[1], delta[0]]]), F_j)
+            Hi = (1 / q) * np.dot(np.array([[-q_sqrt * delta[0], -q_sqrt * delta[1], 0, q_sqrt * delta[0], q_sqrt * delta[1]], [delta[1], -delta[0], -q, -delta[1], delta[0]]]).reshape(2, -1), F_j)
 
             if H is None:
                 H = Hi.copy()
             else:
                 H = np.vstack((H, Hi))
 
-        Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
-        # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
-        K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))
+            Q_t = np.diag(self.variance_r_phi)  # [2m, 2m]
+            # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
+            Ki = np.dot(np.dot(sigma, Hi.T), np.linalg.pinv(np.dot(np.dot(Hi, sigma), Hi.T) + Q_t))
 
-        diff = Z - z_hat
-        diff[1::2] = normalize_angles_array(diff[1::2])
+            diff = Z[Z_j_x_idx : Z_j_y_idx + 1] - z_hat[Z_j_x_idx : Z_j_y_idx + 1]
+            # diff[1::2] = normalize_angles_array(diff[1::2])
+            diff[1] = normalize_angle(diff[1])
 
-        mu = np.asarray(mu + K.dot(diff)).squeeze()
-        sigma = np.dot(np.identity(3 + 2 * N) - np.dot(K, H), sigma)
+            mu = np.asarray(mu + Ki.dot(diff).squeeze()).squeeze()
+            sigma = np.dot(np.identity(3 + 2 * N) - np.dot(Ki, Hi), sigma)
 
-        mu[2] = normalize_angle(mu[2])
+            mu[2] = normalize_angle(mu[2])
+
+        # Q_t = np.diag(self.variance_r_phi)  # [2, 2]
+        # # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
+        # M = np.vstack([np.identity(2)] * m)
+        # # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
+        # K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + np.dot(np.dot(M, Q_t), M.T)))
+        #
+        # diff = Z - z_hat
+        # diff[1::2] = normalize_angles_array(diff[1::2])
+        #
+        # mu = np.asarray(mu + K.dot(diff)).squeeze()
+        # sigma = np.dot(np.identity(3 + 2 * N) - np.dot(K, H), sigma)
+        #
+        # mu[2] = normalize_angle(mu[2])
 
         # Remember to normalize the bearings after subtracting!
         # (hint: use the normalize_all_bearings function available in tools)
