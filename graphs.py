@@ -279,7 +279,7 @@ def save_animation(ani, basedir, file_name):
     print("Saving animation")
     Writer = animation.writers['ffmpeg']
     writer = Writer(fps=50, metadata=dict(artist='Me'), bitrate=1800)
-    ani.save(os.path.join(basedir, f'{file_name}.mp4'), writer=writer, dpi=100)
+    ani.save(os.path.join(basedir, f'{file_name}.mp4'), writer=writer, dpi=100, metadata={'artist': 'ofekp'})
     print("Animation saved")
 
 

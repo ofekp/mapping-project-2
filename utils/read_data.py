@@ -50,7 +50,7 @@ def read_sensor_data(filename):
         
         if (line_spl[0]=='ODOMETRY'):
             
-            sensor_readings[timestamp,'odometry'] = {'r1':float(line_spl[1]),'t':float(line_spl[2]),'r2':float(line_spl[3])}
+            sensor_readings[timestamp, 'odometry'] = {'r1':float(line_spl[1]), 't':float(line_spl[2]), 'r2':float(line_spl[3])}
             
             if first_time: 
                 first_time = False

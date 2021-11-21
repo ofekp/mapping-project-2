@@ -152,7 +152,7 @@ class ExtendedKalmanFilter:
             if self.is_dead_reckoning and elapsed_time > 5:
                 K_t = np.zeros((4, 2), dtype=float)
             else:
-                K_t = np.dot(np.dot(cov, H_t.T), np.linalg.pinv(np.dot(np.dot(H_t, cov), H_t.T) + Q_t)) # [2,3] [3,3] [3,2]   [2,3]
+                K_t = np.dot(np.dot(cov, H_t.T), np.linalg.pinv(np.dot(np.dot(H_t, cov), H_t.T) + Q_t))
 
             # correction
             z_t = self.enu_noise[i, 0:2]
@@ -170,89 +170,106 @@ class ExtendedKalmanFilter:
 
 class ExtendedKalmanFilterSLAM:
     def __init__(self, sigma_x_y_theta, variance_r1_t_r2, variance_r_phi):
-        # self.sigma_x_y_theta = sigma_x_y_theta
-        # self.variance_r_phi = #TODO
-        # self.R_x = #TODO
+        self.sigma_x_y_theta = sigma_x_y_theta
+        self.variance_r_phi = variance_r_phi
         self.variance_r1_t_r2 = variance_r1_t_r2
+        self.R_t_tilde = np.diag(self.variance_r1_t_r2)
 
     def predict(self, mu_prev, sigma_prev, u, N):
         # Perform the prediction step of the EKF
-        # u[0]=translation, u[1]=rotation1, u[2]=rotation2
+        # u[0]=translation, u[1]=rotation1, u[2]=rotation2  # TODO(ofekp): I ignored this...
 
-        delta_trans, delta_rot1, delta_rot2 = #TODO
-        theta_prev = #TODO
+        delta_trans, delta_rot1, delta_rot2 = u['t'], u['r1'], u['r2']
+        x_prev = mu_prev[0]
+        y_prev = mu_prev[1]
+        theta_prev = mu_prev[2]
 
-        F = #TODO
-        G_x = #TODO
-        G = #TODO
-        V = #TODO
+        F = np.hstack((np.identity(3), np.zeros((3, 2 * N))))
+        G_x = np.matrix([
+            [1, 0, -delta_trans * np.sin(theta_prev + delta_rot1)],
+            [0, 1, delta_trans * np.cos(theta_prev + delta_rot1)],
+            [0, 0, 1]
+        ])
+        G_t = np.identity(3 + 2 * N) + np.dot(np.dot(F.T, G_x), F)
 
-        mu_est = #TODO
-        sigma_est = #TODO
+        V_t = np.matrix([
+            [-delta_trans * np.sin(theta_prev + delta_rot1), np.cos(theta_prev + delta_rot1), 0],
+            [delta_trans * np.cos(theta_prev + delta_rot1), np.sin(theta_prev + delta_rot1), 0],
+            [1, 0, 1]
+        ])
+
+        t = np.array([
+            delta_trans * np.cos(x_prev + delta_rot1),
+            delta_trans * np.sin(y_prev + delta_rot1),
+            delta_rot1 + delta_rot2
+        ]).squeeze()
+        mu_est = mu_prev.copy()
+        mu_est[0:3] = np.array([x_prev, y_prev, theta_prev]).squeeze() + t  # TODO(ofekp): consider .T
+        sigma_est = np.dot(np.dot(G_t, sigma_prev), G_t.T) + np.dot(np.dot(F.T, np.dot(np.dot(V_t, self.R_t_tilde), V_t.T)), F)
 
         return mu_est, sigma_est
-    #
-    # def update(self, mu_pred, sigma_pred, z, observed_landmarks, N):
-    #     # Perform filter update (correction) for each odometry-observation pair read from the data file.
-    #     mu = mu_pred.copy()
-    #     sigma = sigma_pred.copy()
-    #     theta = mu[2]
-    #
-    #     m = len(z["id"])
-    #     Z = np.zeros(2 * m)
-    #     z_hat = np.zeros(2 * m)
-    #     H = None
-    #
-    #     for idx in range(m):
-    #         j = z["id"][idx] - 1
-    #         r = z["range"][idx]
-    #         phi = z["bearing"][idx]
-    #
-    #         mu_j_x_idx = 3 + j*2
-    #         mu_j_y_idx = 4 + j*2
-    #         Z_j_x_idx = idx*2
-    #         Z_j_y_idx = 1 + idx*2
-    #
-    #         if observed_landmarks[j] == False:
-    #             mu[mu_j_x_idx: mu_j_y_idx + 1] = mu[0:2] + np.array([r * np.cos(phi + theta), r * np.sin(phi + theta)])
-    #             observed_landmarks[j] = True
-    #
-    #         Z[Z_j_x_idx : Z_j_y_idx + 1] = np.array([r, phi])
-    #
-    #         delta = mu[mu_j_x_idx : mu_j_y_idx + 1] - mu[0 : 2]
-    #         q = delta.dot(delta)
-    #         z_hat[Z_j_x_idx : Z_j_y_idx + 1] = #TODO
-    #
-    #         I = np.diag(5*[1])
-    #         F_j = np.hstack((I[:,:3], np.zeros((5, 2*j)), I[:,3:], np.zeros((5, 2*N-2*(j+1)))))
-    #
-    #         Hi = #TODO
-    #
-    #         if H is None:
-    #             H = Hi.copy()
-    #         else:
-    #             H = np.vstack((H, Hi))
-    #
-    #     Q = #TODO
-    #     S = #TODO
-    #     K = #TODO
-    #
-    #     diff = #TODO
-    #     diff[1::2] = normalize_angles_array(diff[1::2])
-    #
-    #     mu = mu + K.dot(diff)
-    #     sigma = #TODO
-    #
-    #     mu[2] = normalize_angle(mu[2])
-    #
-    #     # Remember to normalize the bearings after subtracting!
-    #     # (hint: use the normalize_all_bearings function available in tools)
-    #
-    #     # Finish the correction step by computing the new mu and sigma.
-    #     # Normalize theta in the robot pose.
-    #
-    #
-    #     return mu, sigma, observed_landmarks
+
+    def update(self, mu_pred, sigma_pred, z, observed_landmarks, N):
+        # Perform filter update (correction) for each odometry-observation pair read from the data file.
+        mu = mu_pred.copy()
+        sigma = sigma_pred.copy()
+        theta = mu[2]
+
+        m = len(z["id"])
+        Z = np.zeros(2 * m)
+        z_hat = np.zeros(2 * m)
+        H = None
+
+        for idx in range(m):
+            j = z["id"][idx] - 1
+            r = z["range"][idx]
+            phi = z["bearing"][idx]
+
+            mu_j_x_idx = 3 + j*2
+            mu_j_y_idx = 4 + j*2
+            Z_j_x_idx = idx*2
+            Z_j_y_idx = 1 + idx*2
+
+            if not observed_landmarks[j]:
+                mu[mu_j_x_idx: mu_j_y_idx + 1] = mu[0:2] + np.array([r * np.cos(phi + theta), r * np.sin(phi + theta)])
+                observed_landmarks[j] = True
+
+            Z[Z_j_x_idx : Z_j_y_idx + 1] = np.array([r, phi])
+
+            delta = mu[mu_j_x_idx : mu_j_y_idx + 1] - mu[0 : 2]
+            q = delta.dot(delta)
+            z_hat[Z_j_x_idx : Z_j_y_idx + 1] = np.array([np.sqrt(q), np.arctan2(delta[1], delta[0]) - theta])
+
+            I = np.diag(5*[1])
+            F_j = np.hstack((I[:,:3], np.zeros((5, 2*j)), I[:,3:], np.zeros((5, 2*N-2*(j+1)))))
+
+            q_sqrt = np.sqrt(q)
+            Hi = (1 / q) * np.dot(np.matrix([[-q_sqrt * delta[0], -q_sqrt * delta[1], 0, q_sqrt * delta[0], q_sqrt * delta[1]], [delta[1], -delta[0], -q, -delta[1], delta[0]]]), F_j)
+
+            if H is None:
+                H = Hi.copy()
+            else:
+                H = np.vstack((H, Hi))
+
+        Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
+        # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
+        K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))
+
+        diff = Z - z_hat
+        diff[1::2] = normalize_angles_array(diff[1::2])
+
+        mu = np.asarray(mu + K.dot(diff)).squeeze()
+        sigma = np.dot(np.identity(3 + 2 * N) - np.dot(K, H), sigma)
+
+        mu[2] = normalize_angle(mu[2])
+
+        # Remember to normalize the bearings after subtracting!
+        # (hint: use the normalize_all_bearings function available in tools)
+
+        # Finish the correction step by computing the new mu and sigma.
+        # Normalize theta in the robot pose.
+
+        return mu, sigma, observed_landmarks
 
     def run(self, sensor_data_gt, sensor_data_noised, landmarks, ax):
         # Get the number of landmarks in the map
@@ -264,10 +281,10 @@ class ExtendedKalmanFilterSLAM:
         # and the landmark poses (xi, yi) are stacked in ascending id order.
         # sigma: (2N+3)x(2N+3) covariance matrix of the normal distribution
 
-        # init_inf_val = #TODO
+        init_inf_val = 500
 
-        mu_arr = np.array([0, 0, 0])
-        sigma_prev = np.diag(self.variance_r1_t_r2 + [5.5] * N)  # TODO(ofekp): I've set all the landmarks variances to 5.5 here, check if this should be changed
+        mu_arr = np.array([[0] * (3 + 2 * N)]).reshape(1, 3 + 2 * N)  # x, y, theta, then (x,y) for each possible landmark
+        sigma_prev = np.diag(self.sigma_x_y_theta + [init_inf_val] * 2 * N)
 
         # sigma for analysis graph sigma_x_y_t + select 2 landmarks
         # TODO(ofekp): these are indices I picked, should check if need to pick something else
@@ -285,7 +302,7 @@ class ExtendedKalmanFilterSLAM:
         mu_arr_gt = np.array([[0, 0, 0]])
 
         for idx in range(sensor_data_count):
-            mu_prev = mu_arr[-1]
+            mu_prev = mu_arr[-1, :]
 
             u = sensor_data_noised[(idx, "odometry")]
             # predict

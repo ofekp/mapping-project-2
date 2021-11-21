@@ -148,7 +148,7 @@ class ProjectQuestions:
         anim = graphs.build_animation(self.enu[:, 0:2], self.enu_noise[:, 0:2], state_kf[:, 0:2], covs, "Animated trajectory", "East [meters]", "North [meters]", "l0", "l1", "l2")
         graphs.save_animation(anim, "../Results/Extended Kalman Filter", "ekf_predict_animation")
 
-    def plot_odometry(self, sensor_data):
+    def get_odometry(self, sensor_data):
         num_frames = len(sensor_data) // 2
         state = np.array([[0, 0, 0]]).reshape(1, 3)
         for i in range(num_frames):
@@ -165,56 +165,56 @@ class ProjectQuestions:
     def Q3(self):
         landmarks = self.dataset.load_landmarks()
         sensor_data_gt = self.dataset.load_sensor_data()
-        state = self.plot_odometry(sensor_data_gt)
+        state = self.get_odometry(sensor_data_gt)
         graphs.plot_trajectory(state, "GT trajectory from odometry", "X [meters]", "Y [meters]")
         graphs.show_graphs()
 
         # add Gaussian noise to the odometry data
         variance_r1_t_r2 = [0.01 ** 2, 0.1 ** 2, 0.01 ** 2]
         sensor_data_noised = add_gaussian_noise_dict(sensor_data_gt, list(np.sqrt(np.array(variance_r1_t_r2))))
-        state_noised = self.plot_odometry(sensor_data_noised)
+        state_noised = self.get_odometry(sensor_data_noised)
         graphs.plot_trajectory(state_noised, "GT trajectory from odometry", "X [meters]", "Y [meters]")
         graphs.show_graphs()
 
         print(sensor_data_gt)
 
-    #     sigma_x_y_theta = #TODO
-    #     variance_r_phi = #TODO
-
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        # ekf_slam = ExtendedKalmanFilterSLAM(sigma_x_y_theta, variance_r1_t_r2, variance_r_phi)
-        # frames, mu_arr, mu_arr_gt, sigma_x_y_t_px1_py1_px2_py2 = ekf_slam.run(sensor_data_gt, sensor_data_noised, landmarks, ax)
+        sigma_x_y_theta = [50, 50, 50]  # TODO(ofekp): need to play with this and the noise/sigma graphs
+        variance_r_phi = [0.1 ** 2, 0.001 ** 2]  # this was given to us in the question, sigma of the sensor data, range and bearing respectively
+        ekf_slam = ExtendedKalmanFilterSLAM(sigma_x_y_theta, variance_r1_t_r2, variance_r_phi)
+        frames, mu_arr, mu_arr_gt, sigma_x_y_t_px1_py1_px2_py2 = ekf_slam.run(sensor_data_gt, sensor_data_noised, landmarks, ax)
 
-    #     graphs.plot_single_graph(mu_arr_gt[:,0] - mu_arr[:,0], "x-$x_n$", "frame", "error", "x-$x_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,0]))
-    #     graphs.plot_single_graph(mu_arr_gt[:,1] - mu_arr[:,1], "y-$y_n$", "frame", "error", "y-$y_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,1]))
-    #     graphs.plot_single_graph(normalize_angles_array(mu_arr_gt[:,2] - mu_arr[:,2]), "$\\theta-\\theta_n$",
-    #                              "frame", "error", "$\\theta-\\theta_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,2]))
-    #
-    #     graphs.plot_single_graph((np.tile(landmarks[1][0], mu_arr.shape[0]) - mu_arr[:,3]),
-    #                              "landmark 1: x-$x_n$", "frame", "error [m]", "x-$x_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,3]))
-    #     graphs.plot_single_graph((np.tile(landmarks[1][1], mu_arr.shape[0]) - mu_arr[:,4]),
-    #                              "landmark 1: y-$y_n$", "frame", "error [m]", "y-$y_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,4]))
-    #
-    #     graphs.plot_single_graph((np.tile(landmarks[2][0], mu_arr.shape[0]) - mu_arr[:,5]),
-    #                              "landmark 2: x-$x_n$", "frame", "error [m]", "x-$x_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,5]))
-    #     graphs.plot_single_graph((np.tile(landmarks[2][1], mu_arr.shape[0]) - mu_arr[:,6]),
-    #                              "landmark 2: y-$y_n$", "frame", "error [m]", "y-$y_n$",
-    #                              is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,6]))
-    #
-    #     ax.set_xlim([-2, 12])
-    #     ax.set_ylim([-2, 12])
-    #
-    #     ani = animation.ArtistAnimation(fig, frames, repeat=False)
-    #     graphs.show_graphs()
-    #     # ani.save('im.mp4', metadata={'artist':'me'})
+        graphs.plot_single_graph(mu_arr_gt[:,0] - mu_arr[:,0], "x-$x_n$", "frame", "error", "x-$x_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,0]))
+        graphs.plot_single_graph(mu_arr_gt[:,1] - mu_arr[:,1], "y-$y_n$", "frame", "error", "y-$y_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,1]))
+        graphs.plot_single_graph(normalize_angles_array(mu_arr_gt[:,2] - mu_arr[:,2]), "$\\theta-\\theta_n$",
+                                 "frame", "error", "$\\theta-\\theta_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,2]))
+
+        graphs.plot_single_graph((np.tile(landmarks[1][0], mu_arr.shape[0]) - mu_arr[:,3]),
+                                 "landmark 1: x-$x_n$", "frame", "error [m]", "x-$x_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,3]))
+        graphs.plot_single_graph((np.tile(landmarks[1][1], mu_arr.shape[0]) - mu_arr[:,4]),
+                                 "landmark 1: y-$y_n$", "frame", "error [m]", "y-$y_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,4]))
+
+        graphs.plot_single_graph((np.tile(landmarks[2][0], mu_arr.shape[0]) - mu_arr[:,5]),
+                                 "landmark 2: x-$x_n$", "frame", "error [m]", "x-$x_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,5]))
+        graphs.plot_single_graph((np.tile(landmarks[2][1], mu_arr.shape[0]) - mu_arr[:,6]),
+                                 "landmark 2: y-$y_n$", "frame", "error [m]", "y-$y_n$",
+                                 is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:,6]))
+
+        ax.set_xlim([-2, 12])
+        ax.set_ylim([-2, 12])
+
+        anim = animation.ArtistAnimation(fig, frames, repeat=False)
+        graphs.show_graphs()
+        # ani.save('im.mp4', metadata={'artist':'me'})
+        graphs.save_animation(anim, "../Results/Extended Kalman Filter Slam", "ekf_slam_animation")
     
     def run(self):
         # self.Q1()
