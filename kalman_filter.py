@@ -173,15 +173,14 @@ class ExtendedKalmanFilterSLAM:
         self.sigma_x_y_theta = sigma_x_y_theta
         self.variance_r_phi = variance_r_phi
         self.variance_r1_t_r2 = variance_r1_t_r2
-        self.R_t_tilde = np.diag(self.variance_r1_t_r2)
+        # self.R_t_tilde = np.diag(self.variance_r1_t_r2)
+        self.R_t_tilde = np.diag(self.sigma_x_y_theta)
 
     def predict(self, mu_prev, sigma_prev, u, N):
         # Perform the prediction step of the EKF
         # u[0]=translation, u[1]=rotation1, u[2]=rotation2  # TODO(ofekp): I ignored this...
 
         delta_trans, delta_rot1, delta_rot2 = u['t'], u['r1'], u['r2']
-        x_prev = mu_prev[0]
-        y_prev = mu_prev[1]
         theta_prev = mu_prev[2]
 
         F = np.hstack((np.identity(3), np.zeros((3, 2 * N))))
@@ -203,8 +202,8 @@ class ExtendedKalmanFilterSLAM:
             delta_trans * np.sin(theta_prev + delta_rot1),
             delta_rot1 + delta_rot2
         ]).squeeze()
-        mu_est = mu_prev.copy()
-        mu_est[0:3] = np.array([x_prev, y_prev, theta_prev]).squeeze() + t  # TODO(ofekp): consider .T
+        mu_est = mu_prev + np.dot(F.T, t)
+        mu_est[2] = normalize_angle(mu_est[2])
         sigma_est = np.dot(np.dot(G_t, sigma_prev), G_t.T) + np.dot(np.dot(F.T, np.dot(np.dot(V_t, self.R_t_tilde), V_t.T)), F)
 
         return mu_est, sigma_est
@@ -251,32 +250,34 @@ class ExtendedKalmanFilterSLAM:
             else:
                 H = np.vstack((H, Hi))
 
-            Q_t = np.diag(self.variance_r_phi)  # [2m, 2m]
-            # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
-            Ki = np.dot(np.dot(sigma, Hi.T), np.linalg.pinv(np.dot(np.dot(Hi, sigma), Hi.T) + Q_t))
-
-            diff = Z[Z_j_x_idx : Z_j_y_idx + 1] - z_hat[Z_j_x_idx : Z_j_y_idx + 1]
-            # diff[1::2] = normalize_angles_array(diff[1::2])
-            diff[1] = normalize_angle(diff[1])
-
-            mu = np.asarray(mu + Ki.dot(diff).squeeze()).squeeze()
-            sigma = np.dot(np.identity(3 + 2 * N) - np.dot(Ki, Hi), sigma)
-
-            mu[2] = normalize_angle(mu[2])
+            # Q_t = np.diag(self.variance_r_phi) * 20  # [2m, 2m]
+            # # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
+            # Ki = np.dot(np.dot(sigma, Hi.T), np.linalg.pinv(np.dot(np.dot(Hi, sigma), Hi.T) + Q_t))
+            #
+            # diff = Z[Z_j_x_idx : Z_j_y_idx + 1] - z_hat[Z_j_x_idx : Z_j_y_idx + 1]
+            # # diff[1::2] = normalize_angles_array(diff[1::2])
+            # diff[1] = normalize_angle(diff[1])
+            #
+            # mu = np.asarray(mu + Ki.dot(diff).squeeze()).squeeze()
+            # sigma = np.dot(np.identity(3 + 2 * N) - np.dot(Ki, Hi), sigma)
+            #
+            # mu[2] = normalize_angle(mu[2])
 
         # Q_t = np.diag(self.variance_r_phi)  # [2, 2]
-        # # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
-        # M = np.vstack([np.identity(2)] * m)
-        # # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
+        # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
+        Q_t = np.diag([0.01] * 2 * m)  # [2m, 2m]
+        M = np.vstack([np.identity(2)] * m)
+        # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
         # K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + np.dot(np.dot(M, Q_t), M.T)))
-        #
-        # diff = Z - z_hat
-        # diff[1::2] = normalize_angles_array(diff[1::2])
-        #
-        # mu = np.asarray(mu + K.dot(diff)).squeeze()
-        # sigma = np.dot(np.identity(3 + 2 * N) - np.dot(K, H), sigma)
-        #
-        # mu[2] = normalize_angle(mu[2])
+        K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))
+
+        diff = Z - z_hat
+        diff[1::2] = normalize_angles_array(diff[1::2])
+
+        mu = np.asarray(mu + K.dot(diff)).squeeze()
+        sigma = np.dot(np.identity(3 + 2 * N) - np.dot(K, H), sigma)
+
+        mu[2] = normalize_angle(mu[2])
 
         # Remember to normalize the bearings after subtracting!
         # (hint: use the normalize_all_bearings function available in tools)
@@ -296,9 +297,9 @@ class ExtendedKalmanFilterSLAM:
         # and the landmark poses (xi, yi) are stacked in ascending id order.
         # sigma: (2N+3)x(2N+3) covariance matrix of the normal distribution
 
-        init_inf_val = 500
+        init_inf_val = 200
 
-        mu_arr = np.array([[0] * (3 + 2 * N)]).reshape(1, 3 + 2 * N)  # x, y, theta, then (x,y) for each possible landmark
+        mu_arr = np.array([[0] * (3 + 2 * N)], dtype=float).reshape(1, 3 + 2 * N)  # x, y, theta, then (x,y) for each possible landmark
         sigma_prev = np.diag(self.sigma_x_y_theta + [init_inf_val] * 2 * N)
 
         # sigma for analysis graph sigma_x_y_t + select 2 landmarks
