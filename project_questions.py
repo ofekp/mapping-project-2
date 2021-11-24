@@ -117,7 +117,7 @@ class ProjectQuestions:
 
         sigma_theta = 0.0
         sigma_vf = 2.0
-        sigma_wz = 0.02
+        sigma_wz = 0.2
         k = 2
         is_dead_reckoning = False
         ekf = ExtendedKalmanFilter(self.enu_noise, self.yaw_vf_wz, self.times, self.sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning)
@@ -128,7 +128,7 @@ class ProjectQuestions:
         print("Extended Kalman Filter - Noisy East/North")
         print("maxE [{}]".format(maxE))
         print("RMSE [{}]".format(RMSE))
-        assert maxE < 6.95
+        assert maxE < 4.05
 
         graphs.plot_trajectory_comparison(self.enu, self.enu_noise, enu_predicted=state_kf[:, 0:2])
         graphs.show_graphs()
@@ -179,7 +179,7 @@ class ProjectQuestions:
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        sigma_x_y_theta = [5.0, 5.0, 0.1]  # TODO(ofekp): need to play with this and the noise/sigma graphs
+        sigma_x_y_theta = [1.1, 1.1, 0.62]  # TODO(ofekp): need to play with this and the noise/sigma graphs
         variance_r_phi = [0.1 ** 2, 0.001 ** 2]  # this was given to us in the question, sigma of the sensor data, range and bearing respectively
         ekf_slam = ExtendedKalmanFilterSLAM(sigma_x_y_theta, variance_r1_t_r2, variance_r_phi)
         frames, mu_arr, mu_arr_gt, sigma_x_y_t_px1_py1_px2_py2 = ekf_slam.run(sensor_data_gt, sensor_data_noised, landmarks, ax)
@@ -209,8 +209,14 @@ class ProjectQuestions:
         ax.set_xlim([-2, 12])
         ax.set_ylim([-2, 12])
 
+        RMSE, maxE = ExtendedKalmanFilter.calc_RMSE_maxE(mu_arr_gt, mu_arr, start_frame=20)
+        print("Extended Kalman Filter - Noisy East/North")
+        print("maxE [{}]".format(maxE))
+        print("RMSE [{}]".format(RMSE))
+        assert maxE < 1.0
+
         anim = animation.ArtistAnimation(fig, frames, repeat=False)
-        graphs.show_graphs()
+        # graphs.show_graphs()
         # ani.save('im.mp4', metadata={'artist':'me'})
         graphs.save_animation(anim, "../Results/Extended Kalman Filter Slam", "ekf_slam_animation")
     

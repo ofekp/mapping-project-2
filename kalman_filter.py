@@ -87,7 +87,7 @@ class ExtendedKalmanFilter:
         self.is_dead_reckoning = is_dead_reckoning
 
     @staticmethod
-    def calc_RMSE_maxE(X_Y_GT, X_Y_est):
+    def calc_RMSE_maxE(X_Y_GT, X_Y_est, start_frame=100):
         """
         That function calculates RMSE and maxE
 
@@ -100,9 +100,9 @@ class ExtendedKalmanFilter:
         """
         e_x = X_Y_GT[:, 0].squeeze() - X_Y_est[:, 0].squeeze()  # e_x dim is [1, -1]
         e_y = X_Y_GT[:, 1].squeeze() - X_Y_est[:, 1].squeeze()  # e_y dim is [1, -1]
-        e_x = e_x[100:]
-        e_y = e_y[100:]
-        RMSE = np.sqrt(1 / (e_x.shape[0] - 100) * np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T))
+        e_x = e_x[start_frame:]
+        e_y = e_y[start_frame:]
+        RMSE = np.sqrt(1 / (e_x.shape[0] - start_frame) * np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T))
         maxE = np.max(np.abs(e_x) + np.abs(e_y))
         return float(RMSE), maxE
 
@@ -115,7 +115,7 @@ class ExtendedKalmanFilter:
         cov_graph_yaw = [math.sqrt(float(cov[2, 2]))]
         covs = [np.array([cov[0, 0], cov[1, 0], cov[0, 1], cov[1, 1]])]
         # we set R according to the suggestion in the presentation form the class
-        R_t_tilde = np.diag([self.sigma_vf, self.sigma_wz])
+        R_t_tilde = np.diag([self.sigma_vf ** 2, self.sigma_wz ** 2])
         Q_t = np.diag([self.sigma_xy, self.sigma_xy])
         # since we only measure the position we initialize C_t as follows
         H_t = np.array([[1.0, 0.0, 0.0],
@@ -265,7 +265,7 @@ class ExtendedKalmanFilterSLAM:
 
         # Q_t = np.diag(self.variance_r_phi)  # [2, 2]
         # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
-        Q_t = np.diag([0.01] * 2 * m)  # [2m, 2m]
+        Q_t = np.diag([0.01, 0.1] * m)  # [2m, 2m]
         M = np.vstack([np.identity(2)] * m)
         # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
         # K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + np.dot(np.dot(M, Q_t), M.T)))
