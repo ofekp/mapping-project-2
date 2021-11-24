@@ -179,7 +179,7 @@ class ProjectQuestions:
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        sigma_x_y_theta = [5.0, 5.0, 1.0]  # TODO(ofekp): need to play with this and the noise/sigma graphs
+        sigma_x_y_theta = [5.0, 5.0, 0.1]  # TODO(ofekp): need to play with this and the noise/sigma graphs
         variance_r_phi = [0.1 ** 2, 0.001 ** 2]  # this was given to us in the question, sigma of the sensor data, range and bearing respectively
         ekf_slam = ExtendedKalmanFilterSLAM(sigma_x_y_theta, variance_r1_t_r2, variance_r_phi)
         frames, mu_arr, mu_arr_gt, sigma_x_y_t_px1_py1_px2_py2 = ekf_slam.run(sensor_data_gt, sensor_data_noised, landmarks, ax)
