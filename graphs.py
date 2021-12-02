@@ -1,9 +1,9 @@
 import os
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.patches import Ellipse
 import numpy as np
 from utils.misc_tools import error_ellipse
-from matplotlib.patches import Ellipse
 import io
 from PIL import Image
 
@@ -26,6 +26,23 @@ def plot_yaw_yaw_rate_fv(yaw, yaw_rate, fv):
     ax3.set_title("Forward velocity per frame", fontsize=20)
     ax3.set_xlabel("Frame #", fontsize=20)
     ax3.set_ylabel("Forward Velocity [m/s]", fontsize=20)
+
+
+def plot_vf_wz_with_and_without_noise(yaw_vf_wz, yaw_vf_wz_noise):
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.plot(range(yaw_vf_wz_noise.shape[0]), yaw_vf_wz_noise[:, 1], 'r')
+    ax1.plot(range(yaw_vf_wz.shape[0]), yaw_vf_wz[:, 1], 'b')
+    ax1.set_title("Forward velocity per frame and the added noise", fontsize=20)
+    ax1.set_xlabel("Frame #", fontsize=20)
+    ax1.set_ylabel("Forward Velocity [m/s]", fontsize=20)
+    ax1.legend(["Noised forward velocity", "Forward velocity ground truth"], prop={"size": 20}, loc="best")
+
+    ax2.plot(range(yaw_vf_wz_noise.shape[0]), yaw_vf_wz_noise[:, 2], 'r')
+    ax2.plot(range(yaw_vf_wz.shape[0]), yaw_vf_wz[:, 2], 'b')
+    ax2.set_title("Yaw change rate per frame and the added noise", fontsize=20)
+    ax2.set_xlabel("Frame #", fontsize=20)
+    ax2.set_ylabel("Yaw change rate [rad/s]", fontsize=20)
+    ax2.legend(["Noised yaw change rate", "Yaw change rate ground truth"], prop={"size": 20}, loc="best")
 
 
 def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
@@ -66,7 +83,7 @@ def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
         ax3.set_ylabel("Error (yaw_gt - yaw_predicted) [rad]", fontsize=20)
 
 
-def plot_trajectory_comparison(enu, enu_noise, enu_predicted=None):
+def plot_trajectory_comparison_with_and_without_noise(enu, enu_noise, enu_predicted=None):
     """
     Args:
         enu: xyz or enu or lla
@@ -76,7 +93,6 @@ def plot_trajectory_comparison(enu, enu_noise, enu_predicted=None):
     Returns:
         plots xy, en or ll in one graph and z, u or a in a second graph
     """
-    # TODO(ofekp): should add legends
     fig, ax = plt.subplots()
     ax.plot(enu[:, 0], enu[:, 1], 'b')
     ax.plot(enu_noise[:, 0], enu_noise[:, 1], 'r')
@@ -87,6 +103,33 @@ def plot_trajectory_comparison(enu, enu_noise, enu_predicted=None):
     ax.set_title("Comparison of the ENU path with and w/o noise" + " and the predicted path" if is_predicted_enu_given else "", fontsize=20)
     ax.set_xlabel("East [meters]", fontsize=20)
     ax.set_ylabel("North [meters]", fontsize=20)
+    if is_predicted_enu_given:
+        ax.legend(["Ground truth trajectory", "Noised trajectory (mean 0, std 3 meters)", "Predicted trajectory"], prop={"size": 20}, loc="best")
+    else:
+        ax.legend(["Ground truth trajectory", "Noised trajectory (mean 0, std 3 meters)"], prop={"size": 20}, loc="best")
+
+
+def plot_trajectory_comparison(enu, enu_predicted):
+    fig, ax = plt.subplots()
+    ax.plot(enu[:, 0], enu[:, 1], 'b')
+    ax.plot(enu_predicted[:, 0], enu_predicted[:, 1], 'g')
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_title("Comparison of the ground truth trajectory and the predicted trajectory", fontsize=20)
+    ax.set_xlabel("East [meters]", fontsize=20)
+    ax.set_ylabel("North [meters]", fontsize=20)
+    ax.legend(["Ground truth trajectory", "Predicted trajectory"], prop={"size": 20}, loc="best")
+
+
+def plot_trajectory_comparison_dead_reckoning(enu, enu_predicted, enu_dead_reckoning):
+    fig, ax = plt.subplots()
+    ax.plot(enu[:, 0], enu[:, 1], 'b')
+    ax.plot(enu_predicted[:, 0], enu_predicted[:, 1], 'g')
+    ax.plot(enu_dead_reckoning[:, 0], enu_dead_reckoning[:, 1], 'r')
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_title("Comparison of the ground truth trajectory, the predicted trajectory and the dead reckoning trajectory", fontsize=20)
+    ax.set_xlabel("East [meters]", fontsize=20)
+    ax.set_ylabel("North [meters]", fontsize=20)
+    ax.legend(["Ground truth trajectory", "Predicted trajectory", "Dead Reckoning"], prop={"size": 20}, loc="best")
 
 
 def plot_trajectory(pos_xy, title, xlabel, ylabel):

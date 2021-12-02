@@ -26,38 +26,39 @@ class KalmanFilter:
         """
         e_x = X_Y_GT[:, 0].squeeze() - X_Y_est[:, 0].squeeze()  # e_x dim is [1, -1]
         e_y = X_Y_GT[:, 1].squeeze() - X_Y_est[:, 1].squeeze()  # e_y dim is [1, -1]
-        e_x = e_x[0, 100:]
-        e_y = e_y[0, 100:]
-        RMSE = np.sqrt(1 / (e_x.shape[0] - 100) * np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T))
+        e_x = e_x[100:]
+        e_y = e_y[100:]
+        # RMSE = np.sqrt(1 / (e_x.shape[0] - 100) * (np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T)))
+        RMSE = np.sqrt((1 / (e_x.shape[0] - 100)) * (np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T)))
         maxE = np.max(np.abs(e_x) + np.abs(e_y))
         return float(RMSE), maxE
 
     def run(self):
         delta_t_0 = self.times[1] - self.times[0]
         enu_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], 0, 0]]).reshape(1, 4)
-        cov = np.diag([7.0, 7.0, 7.0, 7.0])  # TODO(ofekp): should this be [3, 3, 0, 0]?
-        cov_graph_x = [float(cov[0, 0])]
-        cov_graph_y = [float(cov[1, 1])]
+        cov = np.diag([self.sigma_xy ** 2, self.sigma_xy ** 2, 0, 0])  # this has little effect of the final trajectory
+        covs = np.array([[cov[0, 0], cov[0, 1], cov[1, 0], cov[1, 1]]]).reshape(1, 4)
         # we set R according to the suggestion in the presentation form the class
-        R_t = np.diag([0, 0, 1, 1]) * delta_t_0 * self.sigma_n
-        Q_t = np.diag([self.sigma_xy, self.sigma_xy])
-        # since we only measure the position we initialize C_t as follows
+        R_t = np.diag([0.0, 0.0, 1.0, 1.0]) * delta_t_0 * (self.sigma_n ** 2)
+        # Q_t is given to us in the question since sigma_xy is given
+        Q_t = np.diag([self.sigma_xy ** 2, self.sigma_xy ** 2])
+        # since we only measure the position (and not the velocity) we initialize C_t as follows
         C_t = np.array([[1.0, 0.0, 0.0, 0.0],
                         [0.0, 1.0, 0.0, 0.0]]).reshape(2, 4)
         elapsed_time = delta_t_0
         for i in range(1, self.enu_noise.shape[0]):
             # state and covariance prediction
             delta_t = self.times[i] - self.times[i - 1]
-            A = np.matrix([[1.0, 0.0, delta_t, 0.0],
-                           [0.0, 1.0, 0.0, delta_t],
-                           [0.0, 0.0, 1.0, 0.0],
-                           [0.0, 0.0, 0.0, 1.0]])
+            A = np.array([[1.0, 0.0, delta_t, 0.0],
+                          [0.0, 1.0, 0.0, delta_t],
+                          [0.0, 0.0, 1.0, 0.0],
+                          [0.0, 0.0, 0.0, 1.0]]).reshape(4, 4)
             new_state_prediction = np.dot(A, enu_kf[-1, :].T).reshape(4, 1)
             cov = np.dot(np.dot(A, cov), A.T) + R_t
 
             # Kalman gain
             elapsed_time += delta_t
-            if self.is_dead_reckoning and elapsed_time > 5:
+            if self.is_dead_reckoning and elapsed_time > 5.0:
                 K_t = np.zeros((4, 2), dtype=float)
             else:
                 K_t = np.dot(np.dot(cov, C_t.T), np.linalg.pinv(np.dot(np.dot(C_t, cov), C_t.T) + Q_t))
@@ -69,13 +70,12 @@ class KalmanFilter:
 
             # update the predicted path
             enu_kf = np.concatenate([enu_kf, new_state.reshape(1, 4)], axis=0)
-            cov_graph_x.append(float(cov[0, 0]))
-            cov_graph_y.append(float(cov[1, 1]))
-        return enu_kf, cov_graph_x, cov_graph_y, cov
+            covs = np.concatenate([covs, np.array([cov[0, 0], cov[0, 1], cov[1, 0], cov[1, 1]]).reshape(1, 4)], axis=0)
+        return enu_kf, covs
 
 
 class ExtendedKalmanFilter:
-    def __init__(self, enu_noise, yaw_vf_wz, times, sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning):
+    def __init__(self, enu_noise, yaw_vf_wz, times, sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning, dead_reckoning_start_sec=5.0):
         self.enu_noise = enu_noise
         self.yaw_vf_wz = yaw_vf_wz
         self.times = times
@@ -85,6 +85,7 @@ class ExtendedKalmanFilter:
         self.sigma_wz = sigma_wz
         self.k = k
         self.is_dead_reckoning = is_dead_reckoning
+        self.dead_reckoning_start_sec = dead_reckoning_start_sec
 
     @staticmethod
     def calc_RMSE_maxE(X_Y_GT, X_Y_est, start_frame=100):
@@ -102,21 +103,18 @@ class ExtendedKalmanFilter:
         e_y = X_Y_GT[:, 1].squeeze() - X_Y_est[:, 1].squeeze()  # e_y dim is [1, -1]
         e_x = e_x[start_frame:]
         e_y = e_y[start_frame:]
-        RMSE = np.sqrt(1 / (e_x.shape[0] - start_frame) * np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T))
+        RMSE = np.sqrt((1 / (e_x.shape[0] - start_frame)) * (np.dot(e_x, e_x.T) + np.dot(e_y, e_y.T)))
         maxE = np.max(np.abs(e_x) + np.abs(e_y))
         return float(RMSE), maxE
 
     def run(self):
         delta_t_0 = self.times[1] - self.times[0]
         state_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], self.yaw_vf_wz[0, 0]]]).reshape(1, 3)
-        cov = np.diag([self.k * (self.sigma_xy ** 2), self.k * (self.sigma_xy ** 2), self.k * (self.sigma_theta ** 2)])  # todo: check if those are already given as squared
-        cov_graph_x = [math.sqrt(float(cov[0, 0]))]
-        cov_graph_y = [math.sqrt(float(cov[1, 1]))]
-        cov_graph_yaw = [math.sqrt(float(cov[2, 2]))]
-        covs = [np.array([cov[0, 0], cov[1, 0], cov[0, 1], cov[1, 1]])]
+        cov = np.diag([self.k * (self.sigma_xy ** 2), self.k * (self.sigma_xy ** 2), self.k * (self.sigma_theta ** 2)])
+        covs = np.hstack(cov).reshape(1, 9)
         # we set R according to the suggestion in the presentation form the class
         R_t_tilde = np.diag([self.sigma_vf ** 2, self.sigma_wz ** 2])
-        Q_t = np.diag([self.sigma_xy, self.sigma_xy])
+        Q_t = np.diag([self.sigma_xy ** 2, self.sigma_xy ** 2])
         # since we only measure the position we initialize C_t as follows
         H_t = np.array([[1.0, 0.0, 0.0],
                         [0.0, 1.0, 0.0]]).reshape(2, 3)
@@ -149,8 +147,8 @@ class ExtendedKalmanFilter:
 
             # Kalman gain
             elapsed_time += delta_t
-            if self.is_dead_reckoning and elapsed_time > 5:
-                K_t = np.zeros((4, 2), dtype=float)
+            if self.is_dead_reckoning and elapsed_time >= self.dead_reckoning_start_sec:
+                K_t = np.zeros((3, 2), dtype=float)
             else:
                 K_t = np.dot(np.dot(cov, H_t.T), np.linalg.pinv(np.dot(np.dot(H_t, cov), H_t.T) + Q_t))
 
@@ -161,11 +159,8 @@ class ExtendedKalmanFilter:
 
             # update the predicted path
             state_kf = np.concatenate([state_kf, new_state.reshape(1, 3)], axis=0)
-            cov_graph_x.append(math.sqrt(float(cov[0, 0])))
-            cov_graph_y.append(math.sqrt(float(cov[1, 1])))
-            cov_graph_yaw.append(math.sqrt(float(cov[2, 2])))
-            covs.append(np.array([cov[0, 0], cov[1, 0], cov[0, 1], cov[1, 1]]))
-        return state_kf, cov_graph_x, cov_graph_y, cov_graph_yaw, np.stack(covs)
+            covs = np.concatenate([covs, np.hstack(cov).reshape(1, 9)], axis=0)
+        return state_kf, covs
 
 
 class ExtendedKalmanFilterSLAM:

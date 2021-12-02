@@ -11,7 +11,7 @@ def angle_diff(angle1, angle2):
 
 def error_ellipse(position, sigma):
 
-    covariance = sigma[0:2,0:2]
+    covariance = sigma[0:2, 0:2]
     eigenvals, eigenvecs = np.linalg.eig(covariance)
 
     #get largest eigenvalue and eigenvector
@@ -24,7 +24,7 @@ def error_ellipse(position, sigma):
     if max_ind == 0:
         min_ind = 1
 
-    min_eigvec = eigenvecs[:,min_ind]
+    min_eigvec = eigenvecs[:, min_ind]
     min_eigval = eigenvals[min_ind]
 
     #chi-square value for sigma confidence interval
