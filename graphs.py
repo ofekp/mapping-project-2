@@ -134,13 +134,10 @@ def plot_trajectory_comparison_dead_reckoning(enu, enu_predicted, enu_dead_recko
 
 def plot_trajectory(pos_xy, title, xlabel, ylabel):
     """
+    plot a single trajectory
     Args:
-        enu: xyz or enu or lla
-        enu_noise: xyz or enu or lla with noise
-        enu_predicted: xyz or enu or lla after correction
-
-    Returns:
-        plots xy, en or ll in one graph and z, u or a in a second graph
+        pos_xy: xy data
+        title, xlabel, ylabel: labels for the graph
     """
     fig, ax = plt.subplots()
     ax.plot(pos_xy[:, 0], pos_xy[:, 1], 'b')
@@ -148,6 +145,23 @@ def plot_trajectory(pos_xy, title, xlabel, ylabel):
     ax.set_title(title, fontsize=20)
     ax.set_xlabel(xlabel, fontsize=20)
     ax.set_ylabel(ylabel, fontsize=20)
+
+
+def plot_trajectory_with_noise(pos_xy_gt, pos_xy_noise, title, xlabel, ylabel, legend_gt, legend_noise):
+    """
+    plot a ground truth trajectory and a noisy trajectory for comparison
+    Args:
+        pos_xy: xy data
+        title, xlabel, ylabel: labels for the graph
+    """
+    fig, ax = plt.subplots()
+    ax.plot(pos_xy_gt[:, 0], pos_xy_gt[:, 1], 'b')
+    ax.plot(pos_xy_noise[:, 0], pos_xy_noise[:, 1], 'r')
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_title(title, fontsize=20)
+    ax.set_xlabel(xlabel, fontsize=20)
+    ax.set_ylabel(ylabel, fontsize=20)
+    ax.legend([legend_gt, legend_noise], prop={"size": 20}, loc="best")
 
 
 def plot_trajectory_and_height(locations, title1, xlabel1, ylabel1, title2, xlabel2, ylabel2):

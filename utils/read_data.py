@@ -10,9 +10,9 @@ def read_world(filename):
     
     for line in f:
 
-        line_s  = line.split('\n')    
-        line_spl  = line_s[0].split(' ')
-        landmarks[int(line_spl[0])] = [float(line_spl[1]),float(line_spl[2])]      
+        line_s = line.split('\n')
+        line_spl = line_s[0].split(' ')
+        landmarks[int(line_spl[0])] = [float(line_spl[1]), float(line_spl[2])]
 
     return landmarks
 

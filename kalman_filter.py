@@ -164,12 +164,14 @@ class ExtendedKalmanFilter:
 
 
 class ExtendedKalmanFilterSLAM:
-    def __init__(self, sigma_x_y_theta, variance_r1_t_r2, variance_r_phi):
+    def __init__(self, sigma_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind):
         self.sigma_x_y_theta = sigma_x_y_theta
         self.variance_r_phi = variance_r_phi
         self.variance_r1_t_r2 = variance_r1_t_r2
         # self.R_t_tilde = np.diag(self.variance_r1_t_r2)
         self.R_t_tilde = np.diag(self.sigma_x_y_theta)
+        self.landmark1_ind = landmark1_ind
+        self.landmark2_ind = landmark2_ind
 
     def predict(self, mu_prev, sigma_prev, u, N):
         # Perform the prediction step of the EKF
@@ -179,18 +181,18 @@ class ExtendedKalmanFilterSLAM:
         theta_prev = mu_prev[2]
 
         F = np.hstack((np.identity(3), np.zeros((3, 2 * N))))
-        G_x = np.matrix([
+        G_x = np.array([
             [0, 0, -delta_trans * np.sin(theta_prev + delta_rot1)],
             [0, 0, delta_trans * np.cos(theta_prev + delta_rot1)],
             [0, 0, 0]
-        ])
+        ]).reshape(3, 3)
         G_t = np.identity(3 + 2 * N) + np.dot(np.dot(F.T, G_x), F)
 
-        V_t = np.matrix([
+        V_t = np.array([
             [-delta_trans * np.sin(theta_prev + delta_rot1), np.cos(theta_prev + delta_rot1), 0],
             [delta_trans * np.cos(theta_prev + delta_rot1), np.sin(theta_prev + delta_rot1), 0],
             [1, 0, 1]
-        ])
+        ]).reshape(3, 3)
 
         t = np.array([
             delta_trans * np.cos(theta_prev + delta_rot1),
@@ -245,13 +247,14 @@ class ExtendedKalmanFilterSLAM:
             else:
                 H = np.vstack((H, Hi))
 
-            # Q_t = np.diag(self.variance_r_phi) * 20  # [2m, 2m]
+            # # Q_t = np.diag(self.variance_r_phi) * 20  # [2m, 2m]
+            # Q_t = np.diag([0.1, 0.001])  # [2m, 2m]
             # # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
             # Ki = np.dot(np.dot(sigma, Hi.T), np.linalg.pinv(np.dot(np.dot(Hi, sigma), Hi.T) + Q_t))
             #
             # diff = Z[Z_j_x_idx : Z_j_y_idx + 1] - z_hat[Z_j_x_idx : Z_j_y_idx + 1]
             # # diff[1::2] = normalize_angles_array(diff[1::2])
-            # diff[1] = normalize_angle(diff[1])
+            # # diff[1] = normalize_angle(diff[1])
             #
             # mu = np.asarray(mu + Ki.dot(diff).squeeze()).squeeze()
             # sigma = np.dot(np.identity(3 + 2 * N) - np.dot(Ki, Hi), sigma)
@@ -260,11 +263,12 @@ class ExtendedKalmanFilterSLAM:
 
         # Q_t = np.diag(self.variance_r_phi)  # [2, 2]
         # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
-        Q_t = np.diag([0.01, 0.1] * m)  # [2m, 2m]
+        Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]  # TODO(ofekp): I commented this, but this might be the best
+        # Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]
         M = np.vstack([np.identity(2)] * m)
         # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
         # K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + np.dot(np.dot(M, Q_t), M.T)))
-        K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))
+        K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))  # K dim is [3+2N, m]
 
         diff = Z - z_hat
         diff[1::2] = normalize_angles_array(diff[1::2])
@@ -292,17 +296,15 @@ class ExtendedKalmanFilterSLAM:
         # and the landmark poses (xi, yi) are stacked in ascending id order.
         # sigma: (2N+3)x(2N+3) covariance matrix of the normal distribution
 
-        init_inf_val = 200
+        init_inf_val = 200.0
 
         mu_arr = np.array([[0] * (3 + 2 * N)], dtype=float).reshape(1, 3 + 2 * N)  # x, y, theta, then (x,y) for each possible landmark
         sigma_prev = np.diag(self.sigma_x_y_theta + [init_inf_val] * 2 * N)
 
         # sigma for analysis graph sigma_x_y_t + select 2 landmarks
         # TODO(ofekp): these are indices I picked, should check if need to pick something else
-        landmark1_ind = 3
-        landmark2_ind = 5
 
-        Index = [0, 1, 2, landmark1_ind, landmark1_ind + 1, landmark2_ind, landmark2_ind + 1]
+        Index = [0, 1, 2, self.landmark1_ind, self.landmark1_ind + 1, self.landmark2_ind, self.landmark2_ind + 1]
         sigma_x_y_t_px1_py1_px2_py2 = sigma_prev[Index, Index].copy()
 
         observed_landmarks = np.zeros(N, dtype=bool)
