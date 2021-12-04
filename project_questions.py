@@ -365,9 +365,10 @@ class ProjectQuestions:
         ax = fig.add_subplot(111)
         landmark1_ind = 3
         landmark2_ind = 6
-        sigma_x_y_theta = [0.056, 0.051, 0.015]  # TODO(ofekp): need to play with this and the noise/sigma graphs
+        variance_x_y_theta = [0.2 ** 2, 0.3 ** 2, 0.3 ** 2]  # TODO(ofekp): need to play with this and the noise/sigma graphs
+        # sigma_x_y_theta = [0.56, 0.51, 0.15]  # TODO(ofekp): need to play with this and the noise/sigma graphs
         variance_r_phi = [0.1 ** 2, 0.001 ** 2]  # this was given to us in the question, sigma of the sensor data, range and bearing respectively
-        ekf_slam = ExtendedKalmanFilterSLAM(sigma_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind)
+        ekf_slam = ExtendedKalmanFilterSLAM(variance_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind)
         frames, mu_arr, mu_arr_gt, sigma_x_y_t_px1_py1_px2_py2 = ekf_slam.run(sensor_data_gt, sensor_data_noised, landmarks, ax)
 
         # draw the error for x, y and theta
@@ -436,8 +437,8 @@ class ProjectQuestions:
     
     def run(self):
         # self.Q1()
-        self.Q2()
+        # self.Q2()
         # self.Q2_Bentzi()
-        # self.Q3()
+        self.Q3()
         
         

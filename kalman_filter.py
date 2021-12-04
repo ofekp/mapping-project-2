@@ -164,12 +164,15 @@ class ExtendedKalmanFilter:
 
 
 class ExtendedKalmanFilterSLAM:
-    def __init__(self, sigma_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind):
-        self.sigma_x_y_theta = sigma_x_y_theta
+    def __init__(self, variance_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind):
+        self.variance_x_y_theta = variance_x_y_theta
         self.variance_r_phi = variance_r_phi
         self.variance_r1_t_r2 = variance_r1_t_r2
         # self.R_t_tilde = np.diag(self.variance_r1_t_r2)
-        self.R_t_tilde = np.diag(self.sigma_x_y_theta)
+        # self.R_t_tilde = np.diag([0.05, 0.056, 0.015])
+        # self.R_t_tilde = np.diag([0.00055, 0.00051, 0.00015])
+        self.R_t_tilde = np.diag([0.025, 0.051, 0.025])
+        # self.R_t_tilde = np.diag(self.sigma_x_y_theta)
         self.landmark1_ind = landmark1_ind
         self.landmark2_ind = landmark2_ind
 
@@ -263,8 +266,8 @@ class ExtendedKalmanFilterSLAM:
 
         # Q_t = np.diag(self.variance_r_phi)  # [2, 2]
         # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
-        Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]  # TODO(ofekp): I commented this, but this might be the best
-        # Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]
+        # Q_t = np.diag([0.1 ** 2, 0.001 ** 2] * m)  # [2m, 2m]  # TODO(ofekp): I commented this, but this might be the best
+        Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]
         M = np.vstack([np.identity(2)] * m)
         # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
         # K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + np.dot(np.dot(M, Q_t), M.T)))
@@ -299,7 +302,7 @@ class ExtendedKalmanFilterSLAM:
         init_inf_val = 200.0
 
         mu_arr = np.array([[0] * (3 + 2 * N)], dtype=float).reshape(1, 3 + 2 * N)  # x, y, theta, then (x,y) for each possible landmark
-        sigma_prev = np.diag(self.sigma_x_y_theta + [init_inf_val] * 2 * N)
+        sigma_prev = np.diag(self.variance_x_y_theta + [init_inf_val] * 2 * N)
 
         # sigma for analysis graph sigma_x_y_t + select 2 landmarks
         # TODO(ofekp): these are indices I picked, should check if need to pick something else
