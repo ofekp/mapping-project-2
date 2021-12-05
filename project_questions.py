@@ -19,18 +19,20 @@ plt.rc('font', **font)
 class ProjectQuestions:
     def __init__(self, dataset):
         """
-        Initializes:
+        Given a Loaded Kitti data set with the following ground truth values: tti dataset and adds noise to GT-gps values
         - lat: latitude [deg]
         - lon: longitude [deg]
         - yaw: heading [rad]
         - vf: forward velocity parallel to earth-surface [m/s]
         - wz: angular rate around z axis [rad/s]
-        - enu - lla converted to enu
+        Builds the following np arrays:
+        - enu - lla converted to enu data
         - times - for each frame, how much time has elapsed from the previous frame
+        - yaw_vf_wz - yaw, forward velocity and angular change rate
         - enu_noise - enu with Gaussian noise (sigma_xy=3 meters)
+        - yaw_vf_wz_noise - yaw_vf_wz with Gaussian noise in vf (sigma 2.0) and wz (sigma 0.2)
         """
         self.dataset = dataset
-        # build_ENU_from_GPS_trajectory
         self.enu, self.times, self.yaw_vf_wz = build_GPS_trajectory(self.dataset)
         # add noise to the trajectory
         self.sigma_xy = 3
@@ -47,7 +49,7 @@ class ProjectQuestions:
     def Q1(self):
         """
         That function runs the code of question 1 of the project.
-        Loads from kitti dataset, set noise to GT-gps values, and use Kalman Filter over the noised values.
+        uses Kalman Filter over the noised enu values
         """
         # plot lla
         gps_imu_data = [gpu_imu[0] for gpu_imu in self.dataset.get_gps_imu()]
@@ -162,6 +164,11 @@ class ProjectQuestions:
         graphs.save_animation(anim, "../Results/Kalman Filter", "kf_and_dead_rec_animation")
 
     def Q2(self):
+        """
+        Runs the code for question 2 of the project.
+        Uses the extended Kalman filter over the noised enu values from the same Kitte dataset and also makes use of the
+        noised forward velocity and the angular change rate arrays
+        """
         # plot yaw, yaw rate and forward velocity
         graphs.plot_yaw_yaw_rate_fv(self.yaw_vf_wz[:, 0], self.yaw_vf_wz[:, 2], self.yaw_vf_wz[:, 1])
         # graphs.show_graphs()
@@ -276,10 +283,10 @@ class ProjectQuestions:
         graphs.plot_vf_wz_with_and_without_noise(self.yaw_vf_wz, self.yaw_vf_wz_noise)
         graphs.show_graphs("../Results/Extended Kalman Filter", "vf_and_wz_with_and_without_noise")
 
-    def Q2_Bentzi(self):
+    def Q2_BenZion(self):
         """
-        As suggested by Bentzi
-        analysis before adding noise to vf and wz, and while using dead reckoning as the ground truth
+        As suggested by Ben-Zion
+        Analysis before adding noise to vf and wz, and while using dead reckoning as the ground truth
         """
         k = 0.3
         sigma_theta = 0.3
@@ -346,6 +353,13 @@ class ProjectQuestions:
         return state
 
     def Q3(self):
+        """
+        Runs the code for question 3 of the project
+        Loads the odometry (robot motion) and sensor (landmarks) data supplied with the exercise
+        Adds noise to the odometry data r1, trans and r2
+        Uses the extended Kalman filter SLAM algorithm with the noisy odometry data to predict the path of the robot and
+        the landmarks positions
+        """
         landmarks = self.dataset.load_landmarks()
         sensor_data_gt = self.dataset.load_sensor_data()
         state = self.get_odometry(sensor_data_gt)
@@ -365,8 +379,7 @@ class ProjectQuestions:
         ax = fig.add_subplot(111)
         landmark1_ind = 3
         landmark2_ind = 6
-        variance_x_y_theta = [0.2 ** 2, 0.3 ** 2, 0.3 ** 2]  # TODO(ofekp): need to play with this and the noise/sigma graphs
-        # sigma_x_y_theta = [0.56, 0.51, 0.15]  # TODO(ofekp): need to play with this and the noise/sigma graphs
+        variance_x_y_theta = [0.2 ** 2, 0.3 ** 2, 0.3 ** 2]
         variance_r_phi = [0.1 ** 2, 0.001 ** 2]  # this was given to us in the question, sigma of the sensor data, range and bearing respectively
         ekf_slam = ExtendedKalmanFilterSLAM(variance_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind)
         frames, mu_arr, mu_arr_gt, sigma_x_y_t_px1_py1_px2_py2 = ekf_slam.run(sensor_data_gt, sensor_data_noised, landmarks, ax)
@@ -387,33 +400,39 @@ class ProjectQuestions:
         print("Extended Kalman Filter SLAM")
         print("maxE [{:.5f}] meters".format(maxE))
         print("RMSE [{:.5f}]".format(RMSE))
-        assert maxE < 0.82877
-        assert RMSE < 0.30972
+        assert maxE < 0.80642
+        assert RMSE < 0.25427
 
         graphs.plot_single_graph(mu_arr_gt[:, 0] - mu_arr[:, 0], "x-$x_n$", "frame", "error", "x-$x_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 0]))
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_x_y_theta_supplied_code_x")
         graphs.plot_single_graph(mu_arr_gt[:, 1] - mu_arr[:, 1], "y-$y_n$", "frame", "error", "y-$y_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 1]))
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_x_y_theta_supplied_code_y")
         graphs.plot_single_graph(normalize_angles_array(mu_arr_gt[:, 2] - mu_arr[:, 2]), "$\\theta-\\theta_n$",
                                  "frame", "error", "$\\theta-\\theta_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 2]))
-        graphs.show_graphs()
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_x_y_theta_supplied_code_theta")
 
         graphs.plot_single_graph((np.tile(landmarks[1][0], mu_arr.shape[0]) - mu_arr[: ,3]),
                                  "landmark 1: x-$x_n$", "frame", "error [m]", "x-$x_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 3]))
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_landmark_ind_1_x")
         graphs.plot_single_graph((np.tile(landmarks[1][1], mu_arr.shape[0]) - mu_arr[:, 4]),
                                  "landmark 1: y-$y_n$", "frame", "error [m]", "y-$y_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 4]))
-        graphs.show_graphs()
+        # graphs.show_graphs()
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_landmark_ind_1_y")
 
         graphs.plot_single_graph((np.tile(landmarks[2][0], mu_arr.shape[0]) - mu_arr[:, 5]),
                                  "landmark 2: x-$x_n$", "frame", "error [m]", "x-$x_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 5]))
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_landmark_ind_2_x")
         graphs.plot_single_graph((np.tile(landmarks[2][1], mu_arr.shape[0]) - mu_arr[:, 6]),
                                  "landmark 2: y-$y_n$", "frame", "error [m]", "y-$y_n$",
                                  is_scatter=True, sigma=np.sqrt(sigma_x_y_t_px1_py1_px2_py2[:, 6]))
-        graphs.show_graphs()
+        # graphs.show_graphs()
+        graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_landmark_ind_2_y")
 
         # draw the error for the first landmark
         for i, landmark_ind in enumerate([landmark1_ind, landmark2_ind]):
@@ -424,10 +443,6 @@ class ProjectQuestions:
             graphs.plot_error((np.asarray(e_x).squeeze(), cov_graph_x), (np.asarray(e_y).squeeze(), cov_graph_y))
             # graphs.show_graphs()
             graphs.show_graphs("../Results/Extended Kalman Filter Slam", "ekf_slam_error_and_sigma_landmark_ind_{}".format(landmark_ind))
-            # RMSE, maxE = ExtendedKalmanFilter.calc_RMSE_maxE(np.array(landmarks[landmark_ind] * mu_arr.shape[0]).reshape(-1, 2), mu_arr[:, [3 + 2 * (landmark_ind - 1), 4 + 2 * (landmark_ind - 1)]], start_frame=20)
-            # print(f"Extended Kalman Filter SLAM - landmark id [{landmark_ind}]")
-            # print("maxE [{:.5f}] meters".format(maxE))
-            # print("RMSE [{:.5f}]".format(RMSE))
 
         ax.set_xlim([-2, 12])
         ax.set_ylim([-2, 12])
@@ -436,9 +451,9 @@ class ProjectQuestions:
         graphs.save_animation(anim, "../Results/Extended Kalman Filter Slam", "ekf_slam_animation")
     
     def run(self):
-        # self.Q1()
-        # self.Q2()
-        # self.Q2_Bentzi()
+        self.Q1()
+        self.Q2()
+        # self.Q2_BenZion()  # talked to Bentzi to further analyze some results, you may ignore this
         self.Q3()
         
         

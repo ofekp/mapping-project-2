@@ -9,6 +9,13 @@ from PIL import Image
 
 
 def plot_yaw_yaw_rate_fv(yaw, yaw_rate, fv):
+    """
+    plots the yaw, yaw rate, and forward velocity
+    Args:
+        yaw: heading
+        yaw_rate: change in heading
+        fv: forward velocity
+    """
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
     ax1.plot(range(yaw.shape[0]), yaw, 'b')
     ax1.plot(range(yaw_rate.shape[0]), yaw_rate, 'r')
@@ -29,6 +36,12 @@ def plot_yaw_yaw_rate_fv(yaw, yaw_rate, fv):
 
 
 def plot_vf_wz_with_and_without_noise(yaw_vf_wz, yaw_vf_wz_noise):
+    """
+    plots forward velocity and angular change rate with and without noise
+    Args:
+        yaw_vf_wz: numpy array of triplets (yaw, forward velocity, angular change rate)
+        yaw_vf_wz_noise: similar to yaw_vf_wz but contains noise
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.plot(range(yaw_vf_wz_noise.shape[0]), yaw_vf_wz_noise[:, 1], 'r')
     ax1.plot(range(yaw_vf_wz.shape[0]), yaw_vf_wz[:, 1], 'b')
@@ -46,7 +59,14 @@ def plot_vf_wz_with_and_without_noise(yaw_vf_wz, yaw_vf_wz_noise):
 
 
 def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
-    # TODO(ofekp): should add legends
+    """
+    Plots the error for x, y and their predicted sigma values for each frame
+    optionally, the another graph is plotted with the same information for the heading
+    Args:
+        err_cov_x: tuple of (numpy array with difference in position across the x axis, predicted sigma in x axis)
+        err_cov_y: tuple of (numpy array with difference in position across the y axis, predicted sigma in y axis)
+        err_cov_yaw: optional, tuple of (numpy array with normalized difference in heading, predicted sigma in heading)
+    """
     if err_cov_yaw:
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
     else:
@@ -60,6 +80,7 @@ def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
         fontsize=20)
     ax1.set_xlabel("Frame #", fontsize=20)
     ax1.set_ylabel("Error (x_gt - x_predicted) [meters]", fontsize=20)
+    ax1.legend(["Error (x_gt - x_predicted) [meters]", "Predicted variance"], prop={"size": 20}, loc="best")
 
     err_y, cov_y = err_cov_y
     ax2.plot(range(err_y.shape[0]), err_y, 'b')
@@ -70,6 +91,7 @@ def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
         fontsize=20)
     ax2.set_xlabel("Frame #", fontsize=20)
     ax2.set_ylabel("Error (y_gt - y_predicted) [meters]", fontsize=20)
+    ax2.legend(["Error (y_gt - x_predicted) [meters]", "Predicted variance"], prop={"size": 20}, loc="best")
 
     if err_cov_yaw:
         err_yaw, cov_yaw = err_cov_yaw
@@ -81,17 +103,16 @@ def plot_error(err_cov_x, err_cov_y, err_cov_yaw=None):
             fontsize=20)
         ax3.set_xlabel("Frame #", fontsize=20)
         ax3.set_ylabel("Error (yaw_gt - yaw_predicted) [rad]", fontsize=20)
+        ax3.legend(["Error (yaw_gt - x_predicted) [meters]", "Predicted variance"], prop={"size": 20}, loc="best")
 
 
 def plot_trajectory_comparison_with_and_without_noise(enu, enu_noise, enu_predicted=None):
     """
+    plots xy, en or ll in one graph and z, u or a (respectively) in a second graph
     Args:
         enu: xyz or enu or lla
         enu_noise: xyz or enu or lla with noise
-        enu_predicted: xyz or enu or lla after correction
-
-    Returns:
-        plots xy, en or ll in one graph and z, u or a in a second graph
+        enu_predicted: optionally, xyz or enu or lla after correction
     """
     fig, ax = plt.subplots()
     ax.plot(enu[:, 0], enu[:, 1], 'b')
@@ -110,6 +131,12 @@ def plot_trajectory_comparison_with_and_without_noise(enu, enu_noise, enu_predic
 
 
 def plot_trajectory_comparison(enu, enu_predicted):
+    """
+    Plots a comparison between the ground trajectory and the predicted one
+    Args:
+        enu: ground truth enu data
+        enu_predicted: predicted enu data
+    """
     fig, ax = plt.subplots()
     ax.plot(enu[:, 0], enu[:, 1], 'b')
     ax.plot(enu_predicted[:, 0], enu_predicted[:, 1], 'g')
@@ -121,6 +148,15 @@ def plot_trajectory_comparison(enu, enu_predicted):
 
 
 def plot_trajectory_comparison_dead_reckoning(enu, enu_predicted, enu_dead_reckoning):
+    """
+    Plots the ground truth path, the predicted path and the predicted dead reckoning path
+    Args:
+        enu: numpy array where the rows are (x, y) it may contain the heading too without effect
+        enu_predicted: numpy array where the rows are (x, y) it may contain the heading too withou
+                       effect which represents the predicted path
+        enu_dead_reckoning: numpy array where the rows are (x, y) it may contain the heading too without effect
+                            which represents the predicted dead reckoning path
+    """
     fig, ax = plt.subplots()
     ax.plot(enu[:, 0], enu[:, 1], 'b')
     ax.plot(enu_predicted[:, 0], enu_predicted[:, 1], 'g')
@@ -134,7 +170,7 @@ def plot_trajectory_comparison_dead_reckoning(enu, enu_predicted, enu_dead_recko
 
 def plot_trajectory(pos_xy, title, xlabel, ylabel):
     """
-    plot a single trajectory
+    Plots a single trajectory
     Args:
         pos_xy: xy data
         title, xlabel, ylabel: labels for the graph
@@ -149,10 +185,13 @@ def plot_trajectory(pos_xy, title, xlabel, ylabel):
 
 def plot_trajectory_with_noise(pos_xy_gt, pos_xy_noise, title, xlabel, ylabel, legend_gt, legend_noise):
     """
-    plot a ground truth trajectory and a noisy trajectory for comparison
+    Plots a ground truth trajectory and a noisy trajectory for comparison
     Args:
         pos_xy: xy data
+        pos_xy_noise: xy data
         title, xlabel, ylabel: labels for the graph
+        legend_gt - legend text for the ground truth
+        legend_noise - legend text for the noisy path
     """
     fig, ax = plt.subplots()
     ax.plot(pos_xy_gt[:, 0], pos_xy_gt[:, 1], 'b')
@@ -166,10 +205,11 @@ def plot_trajectory_with_noise(pos_xy_gt, pos_xy_noise, title, xlabel, ylabel, l
 
 def plot_trajectory_and_height(locations, title1, xlabel1, ylabel1, title2, xlabel2, ylabel2):
     """
+    Plots xy, en or ll in one graph and z, u or a in a second graph
     Args:
         locations: xyz or enu or lla
-    Returns:
-        plots xy, en or ll in one graph and z, u or a in a second graph
+        title1, xlabel1, ylabel1: labels for the xy, en or ll graph
+        title2, xlabel2, ylabel2: labels for the height (z, u or a) graph
     """
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.plot(locations[:, 0], locations[:, 1], 'b')
@@ -183,6 +223,42 @@ def plot_trajectory_and_height(locations, title1, xlabel1, ylabel1, title2, xlab
     ax2.set_xlabel(xlabel2, fontsize=20)
     ax2.set_ylabel(ylabel2, fontsize=20)
 
+
+def show_graphs(folder=None, file_name=None):
+    """
+    Saves or shows the current plot
+    Args:
+        folder: optional, must be provided with file_name too, the image will be saved to this path with the given file name
+        file_name: optional, must be provided with folder too, the image will be saved to this path with the given file name
+    """
+    if not folder or not file_name:
+        plt.show()
+    else:
+        file_name = "{}/{}.png".format(folder, file_name)
+        figure = plt.gcf()  # get current figure
+        number_of_subplots_in_figure = len(plt.gcf().get_axes())
+        figure.set_size_inches(number_of_subplots_in_figure * 18, 18)
+        ram = io.BytesIO()
+        plt.savefig(ram, format='png', dpi=100)
+        ram.seek(0)
+        im = Image.open(ram)
+        im2 = im.convert('RGB').convert('P', palette=Image.ADAPTIVE)
+        im2.save(file_name, format='PNG')
+        plt.close(figure)
+    plt.close('all')
+
+
+def save_animation(ani, basedir, file_name):
+    print("Saving animation")
+    Writer = animation.writers['ffmpeg']
+    writer = Writer(fps=50, metadata=dict(artist='pearlofe'), bitrate=1800)
+    ani.save(os.path.join(basedir, f'{file_name}.mp4'), writer=writer, dpi=100)
+    print("Animation saved")
+
+
+# **************************************
+# From here are methods I did not change
+# ======================================
 
 def plot_single_graph(X_Y, title, xlabel, ylabel, label, is_scatter=False, sigma=None):
     """
@@ -330,34 +406,6 @@ def build_animation(X_Y0, X_Y1, X_Y2, x_xy_xy_y, title, xlabel, ylabel, label0, 
     
     anim = animation.FuncAnimation(fig, update, frames=values, init_func=init, interval=1, blit=True)
     return anim
-
-
-def save_animation(ani, basedir, file_name):
-    print("Saving animation")
-    Writer = animation.writers['ffmpeg']
-    writer = Writer(fps=50, metadata=dict(artist='pearlofe'), bitrate=1800)
-    ani.save(os.path.join(basedir, f'{file_name}.mp4'), writer=writer, dpi=100)
-    print("Animation saved")
-
-
-def show_graphs(folder=None, file_name=None, overwrite=False):
-    if not folder or not file_name:
-        plt.show()
-    else:
-        file_name = "{}/{}.png".format(folder, file_name)
-        if overwrite and os.path.isfile(file_name):
-            return
-        figure = plt.gcf()  # get current figure
-        number_of_subplots_in_figure = len(plt.gcf().get_axes())
-        figure.set_size_inches(number_of_subplots_in_figure * 18, 18)
-        ram = io.BytesIO()
-        plt.savefig(ram, format='png', dpi=100)
-        ram.seek(0)
-        im = Image.open(ram)
-        im2 = im.convert('RGB').convert('P', palette=Image.ADAPTIVE)
-        im2.save(file_name, format='PNG')
-        plt.close(figure)
-    plt.close('all')
 
 
 if __name__ == '__main__':

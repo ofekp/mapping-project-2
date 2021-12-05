@@ -2,10 +2,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 from utils.plot_state import plot_state
 from data_preparation import normalize_angle, normalize_angles_array
-import math
+
 
 class KalmanFilter:
+    """
+    class for the implementation of Kalman filter
+    """
+
     def __init__(self, enu_noise, times, sigma_xy, sigma_n, is_dead_reckoning):
+        """
+        Args:
+            enu_noise: enu data with noise
+            times: elapsed time in seconds from the first timestamp in the sequence
+            sigma_xy: sigma in the x and y axis as provided in the question
+            sigma_n: hyperparameter used to fine tune the filter
+            is_dead_reckoning: should dead reckoning be applied after 5.0 seconds when applying the filter
+        """
         self.enu_noise = enu_noise
         self.times = times
         self.sigma_xy = sigma_xy
@@ -15,7 +27,7 @@ class KalmanFilter:
     @staticmethod
     def calc_RMSE_maxE(X_Y_GT, X_Y_est):
         """
-        That function calculates RMSE and maxE
+        Calculates RMSE and maxE
 
         Args:
             X_Y_GT (np.ndarray): ground truth values of x and y
@@ -34,6 +46,9 @@ class KalmanFilter:
         return float(RMSE), maxE
 
     def run(self):
+        """
+        Runs the Kalman filter
+        """
         delta_t_0 = self.times[1] - self.times[0]
         enu_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], 0, 0]]).reshape(1, 4)
         cov = np.diag([self.sigma_xy ** 2, self.sigma_xy ** 2, 0, 0])  # this has little effect of the final trajectory
@@ -75,7 +90,24 @@ class KalmanFilter:
 
 
 class ExtendedKalmanFilter:
+    """
+    class for the implementation of the extended Kalman filter
+    """
     def __init__(self, enu_noise, yaw_vf_wz, times, sigma_xy, sigma_theta, sigma_vf, sigma_wz, k, is_dead_reckoning, dead_reckoning_start_sec=5.0):
+        """
+        Args:
+            enu_noise: enu data with noise
+            times: elapsed time in seconds from the first timestamp in the sequence
+            sigma_xy: sigma in the x and y axis as provided in the question
+            sigma_n: hyperparameter used to fine tune the filter
+            yaw_vf_wz: the yaw, forward velocity and angular change rate to be used (either non noisy or noisy, depending on the question)
+            sigma_theta: sigma of the heading
+            sigma_vf: sigma of the forward velocity
+            sigma_wz: sigma of the angular change rate
+            k: hyper parameter to fine tune the filter
+            is_dead_reckoning: should dead reckoning be applied after 5.0 seconds when applying the filter
+            dead_reckoning_start_sec: from what second do we start applying dead reckoning, used for experimentation only
+        """
         self.enu_noise = enu_noise
         self.yaw_vf_wz = yaw_vf_wz
         self.times = times
@@ -108,6 +140,9 @@ class ExtendedKalmanFilter:
         return float(RMSE), maxE
 
     def run(self):
+        """
+        Runs the extended Kalman filter
+        """
         delta_t_0 = self.times[1] - self.times[0]
         state_kf = np.array([[self.enu_noise[0, 0], self.enu_noise[0, 1], self.yaw_vf_wz[0, 0]]]).reshape(1, 3)
         cov = np.diag([self.k * (self.sigma_xy ** 2), self.k * (self.sigma_xy ** 2), self.k * (self.sigma_theta ** 2)])
@@ -164,22 +199,36 @@ class ExtendedKalmanFilter:
 
 
 class ExtendedKalmanFilterSLAM:
+    """
+    class for the implementation of Kalman filter SLAM algorithm
+    """
+
     def __init__(self, variance_x_y_theta, variance_r1_t_r2, variance_r_phi, landmark1_ind, landmark2_ind):
+        """
+        Args:
+            variance_x_y_theta: variance in x, y and theta respectively
+            variance_r1_t_r2: variance in rotation1, translation and rotation2 respectively
+            variance_r_phi: variance in the range and bearing
+            landmark1_ind: first pick of landmark id, used for analysis
+            landmark2_ind: second pick of landmark id, used for analysis
+        """
         self.variance_x_y_theta = variance_x_y_theta
         self.variance_r_phi = variance_r_phi
         self.variance_r1_t_r2 = variance_r1_t_r2
-        # self.R_t_tilde = np.diag(self.variance_r1_t_r2)
-        # self.R_t_tilde = np.diag([0.05, 0.056, 0.015])
-        # self.R_t_tilde = np.diag([0.00055, 0.00051, 0.00015])
         self.R_t_tilde = np.diag([0.025, 0.051, 0.025])
-        # self.R_t_tilde = np.diag(self.sigma_x_y_theta)
+        # self.R_t_tilde = np.diag([0.0025, 0.025, 0.0025])  # second case of hyper parameters (when using the standard algorithm)
         self.landmark1_ind = landmark1_ind
         self.landmark2_ind = landmark2_ind
 
     def predict(self, mu_prev, sigma_prev, u, N):
-        # Perform the prediction step of the EKF
-        # u[0]=translation, u[1]=rotation1, u[2]=rotation2  # TODO(ofekp): I ignored this...
-
+        """
+        Perform the prediction step of the EKF SLAM algorithm
+        Args:
+            mu_prev: previous state
+            sigma_prev: previous covariance matrix
+            u: the current rotation1, translation and rotation2 describing the motion in the current frame
+            N: the total number of landmarks in the whole sequence
+        """
         delta_trans, delta_rot1, delta_rot2 = u['t'], u['r1'], u['r2']
         theta_prev = mu_prev[2]
 
@@ -209,7 +258,15 @@ class ExtendedKalmanFilterSLAM:
         return mu_est, sigma_est
 
     def update(self, mu_pred, sigma_pred, z, observed_landmarks, N):
-        # Perform filter update (correction) for each odometry-observation pair read from the data file.
+        """
+        Perform filter update (correction) for each odometry-observation pair read from the data file.
+        Args:
+            mu_pred: state as calculated by the prediction step
+            sigma_pred: covariance matrix as calculated by the prediction step
+            z: sensor data, containing the current frame landmarks with range and bearing for each one
+            observed_landmarks: array of ids of landmarks we've already seen before
+            N: the total number of landmarks in the whole sequence
+        """
         mu = mu_pred.copy()
         sigma = sigma_pred.copy()
         theta = mu[2]
@@ -250,27 +307,16 @@ class ExtendedKalmanFilterSLAM:
             else:
                 H = np.vstack((H, Hi))
 
-            # # Q_t = np.diag(self.variance_r_phi) * 20  # [2m, 2m]
+            # standard algorithm for comparison, for further analysis only
             # Q_t = np.diag([0.1, 0.001])  # [2m, 2m]
-            # # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
             # Ki = np.dot(np.dot(sigma, Hi.T), np.linalg.pinv(np.dot(np.dot(Hi, sigma), Hi.T) + Q_t))
-            #
             # diff = Z[Z_j_x_idx : Z_j_y_idx + 1] - z_hat[Z_j_x_idx : Z_j_y_idx + 1]
-            # # diff[1::2] = normalize_angles_array(diff[1::2])
-            # # diff[1] = normalize_angle(diff[1])
-            #
+            # diff[1] = normalize_angle(diff[1])
             # mu = np.asarray(mu + Ki.dot(diff).squeeze()).squeeze()
             # sigma = np.dot(np.identity(3 + 2 * N) - np.dot(Ki, Hi), sigma)
-            #
             # mu[2] = normalize_angle(mu[2])
 
-        # Q_t = np.diag(self.variance_r_phi)  # [2, 2]
-        # Q_t = np.diag(self.variance_r_phi * m)  # [2m, 2m]
-        # Q_t = np.diag([0.1 ** 2, 0.001 ** 2] * m)  # [2m, 2m]  # TODO(ofekp): I commented this, but this might be the best
         Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]
-        M = np.vstack([np.identity(2)] * m)
-        # S = sigma #TODO  # TODO(ofekp): I ignored this, need to check
-        # K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + np.dot(np.dot(M, Q_t), M.T)))
         K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))  # K dim is [3+2N, m]
 
         diff = Z - z_hat
@@ -290,6 +336,14 @@ class ExtendedKalmanFilterSLAM:
         return mu, sigma, observed_landmarks
 
     def run(self, sensor_data_gt, sensor_data_noised, landmarks, ax):
+        """
+        Runs the extended Kalman filter SLAM algorithm
+        Args:
+            sensor_data_gt: will be used only to build the ground truth trajectory from the non noisy odometry data
+            sensor_data_noised: the noisy odometry data and the sensor (landmarks range and bearing) data
+            landmarks: list of ids of all the landmarks in the entire sequence
+            ax: will be used to build the final animation
+        """
         # Get the number of landmarks in the map
         N = len(landmarks)
 
@@ -305,8 +359,6 @@ class ExtendedKalmanFilterSLAM:
         sigma_prev = np.diag(self.variance_x_y_theta + [init_inf_val] * 2 * N)
 
         # sigma for analysis graph sigma_x_y_t + select 2 landmarks
-        # TODO(ofekp): these are indices I picked, should check if need to pick something else
-
         Index = [0, 1, 2, self.landmark1_ind, self.landmark1_ind + 1, self.landmark2_ind, self.landmark2_ind + 1]
         sigma_x_y_t_px1_py1_px2_py2 = sigma_prev[Index, Index].copy()
 
