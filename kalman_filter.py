@@ -215,8 +215,7 @@ class ExtendedKalmanFilterSLAM:
         self.variance_x_y_theta = variance_x_y_theta
         self.variance_r_phi = variance_r_phi
         self.variance_r1_t_r2 = variance_r1_t_r2
-        self.R_t_tilde = np.diag([0.025, 0.051, 0.025])
-        # self.R_t_tilde = np.diag([0.0025, 0.025, 0.0025])  # second case of hyper parameters (when using the standard algorithm)
+        self.R_t_tilde = np.diag(variance_r1_t_r2)
         self.landmark1_ind = landmark1_ind
         self.landmark2_ind = landmark2_ind
 
@@ -308,7 +307,7 @@ class ExtendedKalmanFilterSLAM:
                 H = np.vstack((H, Hi))
 
             # standard algorithm for comparison, for further analysis only
-            # Q_t = np.diag([0.1, 0.001])  # [2m, 2m]
+            # Q_t = np.diag([0.3, 0.003])  # [2m, 2m]
             # Ki = np.dot(np.dot(sigma, Hi.T), np.linalg.pinv(np.dot(np.dot(Hi, sigma), Hi.T) + Q_t))
             # diff = Z[Z_j_x_idx : Z_j_y_idx + 1] - z_hat[Z_j_x_idx : Z_j_y_idx + 1]
             # diff[1] = normalize_angle(diff[1])
@@ -316,7 +315,7 @@ class ExtendedKalmanFilterSLAM:
             # sigma = np.dot(np.identity(3 + 2 * N) - np.dot(Ki, Hi), sigma)
             # mu[2] = normalize_angle(mu[2])
 
-        Q_t = np.diag([0.1, 0.001] * m)  # [2m, 2m]
+        Q_t = np.diag([0.3, 0.003] * m)  # [2m, 2m]
         K = np.dot(np.dot(sigma, H.T), np.linalg.pinv(np.dot(np.dot(H, sigma), H.T) + Q_t))  # K dim is [3+2N, m]
 
         diff = Z - z_hat

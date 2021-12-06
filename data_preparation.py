@@ -57,6 +57,7 @@ def build_GPS_trajectory(dataset):
     
     return locations, times, yaw_vf_wz
 
+
 def add_gaussian_noise(samples, sigma):
     assert type(samples) is np.ndarray, "samples must be ndarray type"
     assert len(samples.shape) == 1, "samples must be 1D array"
